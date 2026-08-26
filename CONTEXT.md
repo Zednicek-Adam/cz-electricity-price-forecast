@@ -108,6 +108,20 @@ known, honest only because the cutoff is enforced structurally rather than
 asserted. Every forecast v1 shows is one.
 _Avoid_: simulation, replay, hindcast
 
+**Scoreboard**:
+The standing record of how every model has done, measured against the day-lag
+naïve and against the observed prices it was scored on. It is the product: the
+dashboard exists to show it, and it is self-verifying because the ground truth
+arrives independently of the forecast.
+_Avoid_: leaderboard, results, performance
+
+**Published metric**:
+An accuracy figure with a fixed definition, computed once when the forecasts it
+describes are written, and thereafter read rather than recalculated. Every number
+the scoreboard shows is one, so all readers see the same figure computed the same
+way. See ADR-0004.
+_Avoid_: stat, score, aggregate
+
 **Grid repair**:
 The transformation that turns the true, irregular record of a daylight-saving
 delivery day into the regular 24-period grid the models require: the fall-back
