@@ -74,10 +74,33 @@ days in, whole days out. Each input series has its own rule; v1 has one series.
 See ADR-0002.
 _Avoid_: as-of time, knowledge date, information set
 
+**Model**:
+An object that turns history into forecasts. Construction does its setup once;
+`forecast(history, target_day) -> 24 floats` is then called per delivery day and
+holds no store handle, no provider and no clock. v1 has exactly three — the
+day-lag naïve, AR-168 and Chronos-2. See ADR-0003.
+_Avoid_: predictor, algorithm, estimator
+
+**Runner**:
+What drives models. It owns the day loop, slices history at the cutoff, and
+writes the forecasts. Everything a model is not allowed to touch lives here, so
+it is also the single thing the live cutover changes. See ADR-0002.
+_Avoid_: pipeline, orchestrator, job
+
 **Headline model**:
 The single model the dashboard leads with. A configuration choice, frozen before
-the scoreboard is read, and never recorded on a forecast row. Provisionally
-univariate Chronos-2; see issue #8.
+the scoreboard is read, and never recorded on a forecast row. It is **univariate
+Chronos-2** — a zero-shot pretrained model, called rather than fitted, pinned to
+an explicit Hugging Face revision. See ADR-0003.
+
+**Day-lag naïve**:
+The benchmark every accuracy claim is measured against: the observed price for
+the same period ordinal on the previous delivery day. It is a model like any
+other, and it is also the v1 placeholder. It is deliberately *not* the seasonal
+naïve standard in the forecasting literature, which makes rMAE here weaker than
+the published convention — so rMAE is always rendered "vs day-lag naïve", never
+bare. See ADR-0003.
+_Avoid_: naïve, benchmark, baseline (unqualified)
 
 **Backtest**:
 A forecast run replayed over a delivery day whose observed price is already
