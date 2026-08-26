@@ -81,6 +81,10 @@ holds no store handle, no provider and no clock. v1 has exactly three — the
 day-lag naïve, AR-168 and Chronos-2. See ADR-0003.
 _Avoid_: predictor, algorithm, estimator
 
+A model is named on a stored row by its **slug**, and these are the only three:
+`chronos2`, `ar168`, `daylag`. The slug is free text in the database rather than a
+constraint, so this list is the authority. See ADR-0005.
+
 **Runner**:
 What drives models. It owns the day loop, slices history at the cutoff, and
 writes the forecasts. Everything a model is not allowed to touch lives here, so
@@ -129,7 +133,56 @@ day's two overlapping periods averaged into one, the spring-forward day's missin
 period linearly interpolated. It is lossy, it belongs to the model layer, and it
 is never applied to stored observed prices. See ADR-0001.
 
+**Repaired observed price**:
+The observed price series after grid repair, on the regular 24-period grid. It is
+stored rather than recomputed — written by the loader in the same transaction as
+the observed prices it derives from — so grid repair has exactly one
+implementation. It is what the models are fed and what forecasts are scored
+against. See ADR-0005.
+_Avoid_: repaired series (unqualified), model input, adjusted price
+
 **Provenance**:
 Where an observed price came from and when it was retrieved. Carried on the row,
 because it cannot be reconstructed after the fact.
 _Avoid_: origin, lineage
+
+### Accuracy
+
+Metric names are stored **unqualified** — `mae`, `rmse`, `smape`, `rmae` — so this
+section is the definition of record for what each one meant. Transcribed from
+`epf-diploma/models/_utils.R`; `e = observed − forecast` over the delivery periods
+in scope.
+
+**MAE** — mean absolute error, in EUR/MWh.
+
+    MAE = mean(|e|)
+
+**RMSE** — root mean squared error, in EUR/MWh.
+
+    RMSE = sqrt(mean(e²))
+
+**SMAPE** — symmetric mean absolute percentage error, scaled ×200, so its range is
+0–200 rather than 0–100. Where `|observed| + |forecast| = 0` the ratio is taken as
+0 rather than `NaN`, which is a real case here and not only a missing-data guard.
+
+    SMAPE = 200 × mean( |observed − forecast| / (|observed| + |forecast|) )
+
+**rMAE** — relative MAE, the ratio of a model's MAE to the benchmark's.
+
+    rMAE = MAE(model) / MAE(day-lag naïve)
+
+The denominator is the **day-lag naïve** (ADR-0003), *not* the seasonal naïve the
+electricity-price-forecasting literature uses. The formula is the thesis's; the
+input is not, which is why these figures are not comparable to published EPF work
+or to the thesis's own numbers. See the day-lag naïve entry for the disclosure
+this obliges.
+
+**Diebold–Mariano test**:
+A pairwise test of whether one model's forecast errors are significantly more
+accurate than another's. Run per **hour-of-day bucket** rather than over a date
+range — the buckets are the grain — one-sided, on absolute loss, so it tests what
+MAE ranks. Stored for both ordered directions, and the fixed reading is: **H₁ is
+that `model_a` is more accurate than `model_b`**, so a small `p_value` means
+`model_a` wins. The statistic is antisymmetric between the two directions; the
+p-values are complementary, not negated. See ADR-0005.
+_Avoid_: significance test, DM p-value (unqualified)
