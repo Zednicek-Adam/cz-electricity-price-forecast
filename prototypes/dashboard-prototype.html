@@ -71,7 +71,7 @@ const METRICS = {
   mae:  {label:"MAE",   unit:"EUR/MWh", dp:1},
   rmse: {label:"RMSE",  unit:"EUR/MWh", dp:1},
   smape:{label:"SMAPE", unit:"%",       dp:1},
-  rmae: {label:"rMAE",  unit:"vs naïve",dp:3},
+  rmae: {label:"rMAE",  unit:"",           dp:3},
 };
 const fmt = (v,m) => v.toFixed(METRICS[m].dp);
 const f1 = v => v.toFixed(1), f3 = v => v.toFixed(3);
@@ -227,26 +227,22 @@ function dmChart(model,{w=900,h=250}={}){
   return svg;
 }
 
-/* the complete table: every metric, every model, whole period then per year.
-   The per-year rows are what keep ADR-0006's "MAE never renders alone" rule
-   alive now that the per-year bar chart is gone. */
+/* the complete table: every metric, every model, over the whole record.
+   No per-year rows and no per-year chart - the Over time view is now the only
+   thing standing between an aggregate MAE and a reader who takes it as
+   timeless. That is an ADR-0006 amendment, not a layout tweak. */
 function accuracyTable(){
   const t=el("table");
   t.appendChild(el("thead",{},[el("tr",{},[
     el("th",{text:"Model"}),el("th",{text:"MAE"}),el("th",{text:"RMSE"}),
-    el("th",{text:"SMAPE %"}),el("th",{text:"rMAE vs naïve"})])]));
+    el("th",{text:"SMAPE %"}),el("th",{text:"rMAE"})])]));
   const tb=el("tbody");
-  const scope=(title,src,strong)=>{
-    tb.appendChild(el("tr",{class:"scope"},[el("td",{colspan:5,html:`<span>${title}</span>`})]));
-    MODELS.forEach(k=>{ const m=src[k];
-      tb.appendChild(el("tr",{},[
-        el("td",{html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]}`}),
-        el("td",{text:f1(m.mae)}), el("td",{text:f1(m.rmse)}), el("td",{text:f1(m.smape)}),
-        el("td",{text:f3(m.rmae),style:(strong&&k==="c")?"font-weight:650":""})]));
-    });
-  };
-  scope("All 1,827 days · 2020–2024", P.overall, true);
-  YEARS.forEach(y=>scope(y, P.byYear[y], false));
+  MODELS.forEach(k=>{ const m=P.overall[k];
+    tb.appendChild(el("tr",{},[
+      el("td",{html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]}`}),
+      el("td",{text:f1(m.mae)}), el("td",{text:f1(m.rmse)}), el("td",{text:f1(m.smape)}),
+      el("td",{text:f3(m.rmae),style:k==="c"?"font-weight:650":""})]));
+  });
   t.appendChild(tb); return t;
 }
 
@@ -312,7 +308,7 @@ function Dashboard(state,render){
     const b=el("div");
     b.appendChild(el("div",{class:"cap",
       html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]} ${M.label}`}));
-    b.appendChild(el("div",{text:fmt(v,state.metric)+" "+M.unit,
+    b.appendChild(el("div",{text:(fmt(v,state.metric)+" "+M.unit).trim(),
       style:"font-size:22px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums"}));
     nums.appendChild(b);
   });
@@ -336,7 +332,7 @@ function Dashboard(state,render){
   root.appendChild(hero);
 
   const acc=el("div",{class:"card",style:"margin-top:16px"});
-  acc.appendChild(cap("Accuracy"));
+  acc.appendChild(cap("Accuracy · all 1,827 days"));
   acc.appendChild(accuracyTable());
   root.appendChild(acc);
 
