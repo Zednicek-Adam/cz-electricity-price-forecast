@@ -5,16 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PROTOTYPE — dashboard ten-second story (issue #12)</title>
 <!--
-  THROWAWAY PROTOTYPE — issue #12 "Prototype the dashboard's ten-second story".
+  THROWAWAY PROTOTYPE - issue #12 "Prototype the dashboard's ten-second story".
 
-  Round 2. Variant B ("one day at a time") won; A and C are dropped and live in
-  this branch's history. This file is B, revised to the dev's notes:
-    - no whole-period triple in the header
-    - a metric selector (MAE / RMSE / SMAPE) driving the day's headline numbers
-      and the ribbon beneath the chart
-    - the Diebold-Mariano view is its own card
-    - the RMSE / SMAPE drill-down table is gone
-    - "Day-lag naive" is just "Naive"
+  Round 3. Variant B won in round 1; rounds 2 and 3 revise it to the dev's notes.
+  The hero is now one chart with two views sharing one metric selector:
+    Day       - observed against the three models, prices, for one delivery day
+    Over time - the running (cumulative / n) metric for the three models, no
+                observed line, across all 1,827 days
+  Metrics: MAE / RMSE / SMAPE / rMAE.
+  Accuracy card is one complete table (all metrics, all models, per year).
 
   Not production code: no build, no framework, no tests, light mode only,
   hand-rolled SVG (the charting-library question is still open fog).
@@ -37,16 +36,20 @@
   .card{background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:16px}
   .cap{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
   table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
-  th,td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--grid)}
+  th,td{text-align:right;padding:6px 10px;border-bottom:1px solid var(--grid)}
   th:first-child,td:first-child{text-align:left}
   th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
   tbody tr:last-child td{border-bottom:none}
+  tr.scope td{border-bottom:none;padding-top:14px;padding-bottom:2px}
+  tr.scope td span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+                   color:var(--muted);font-weight:600}
   .swatch{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px}
   button,select,input{font-family:inherit;font-size:13px}
   .btn{background:var(--surface-1);border:1px solid var(--axis);border-radius:6px;
        padding:5px 10px;cursor:pointer;color:var(--ink)}
   .btn:hover{background:#f2f1ec}
   .btn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .group{display:flex;gap:6px}
   footer{color:var(--muted);font-size:12px;padding:20px 0}
   #tip{position:fixed;pointer-events:none;background:var(--ink);color:#fff;font-size:12px;
        padding:7px 9px;border-radius:6px;opacity:0;transition:opacity .08s;z-index:50;
@@ -64,9 +67,13 @@ const DAYS = Object.keys(P.days).sort();
 const MODELS = ["c","a","n"];
 const COLOR = {o:"var(--s-obs)", c:"var(--s-chronos)", a:"var(--s-ar)", n:"var(--s-naive)"};
 const NAME  = {o:"Observed", c:"Chronos-2", a:"AR-168", n:"Naïve"};
-const METRICS = {mae:{label:"MAE", unit:"EUR/MWh", dp:1},
-                 rmse:{label:"RMSE", unit:"EUR/MWh", dp:1},
-                 smape:{label:"SMAPE", unit:"%", dp:1}};
+const METRICS = {
+  mae:  {label:"MAE",   unit:"EUR/MWh", dp:1},
+  rmse: {label:"RMSE",  unit:"EUR/MWh", dp:1},
+  smape:{label:"SMAPE", unit:"%",       dp:1},
+  rmae: {label:"rMAE",  unit:"vs naïve",dp:3},
+};
+const fmt = (v,m) => v.toFixed(METRICS[m].dp);
 const f1 = v => v.toFixed(1), f3 = v => v.toFixed(3);
 const el = (t,a={},kids=[]) => { const n=document.createElement(t);
   for(const k in a){ k==="html"?n.innerHTML=a[k]:k==="text"?n.textContent=a[k]:n.setAttribute(k,a[k]); }
@@ -78,9 +85,7 @@ const showTip = (e,text) => { tip.textContent=text; tip.style.opacity=1;
   tip.style.left=Math.min(e.clientX+14, innerWidth-tip.offsetWidth-8)+"px";
   tip.style.top=(e.clientY-tip.offsetHeight-12)+"px"; };
 const hideTip = () => tip.style.opacity=0;
-
-const MONTHS = Object.keys(P.byMonth).sort();
-const YEARS  = Object.keys(P.byYear).sort();
+const YEARS = Object.keys(P.byYear).sort();
 
 /* end-labels collide when two series converge; push them apart by 12px */
 function placeLabels(items){
@@ -90,10 +95,9 @@ function placeLabels(items){
   items.forEach(it=>it.draw(it.y));
 }
 
-/* the day view: observed + the three models over 24 period ordinals.
-   Always prices - the metric selector changes the numbers, not this chart. */
-function dayChart(day, {w=980,h=340,series=["o","c","a","n"]}={}){
-  const d=P.days[day], m={t:14,r:70,b:26,l:50};
+/* ── hero view 1: one delivery day, prices, observed against the models ── */
+function dayChart(day, {w=980,h=360}={}){
+  const series=["o","c","a","n"], d=P.days[day], m={t:14,r:70,b:26,l:50};
   const vals=series.flatMap(k=>d[k]);
   let lo=Math.min(...vals), hi=Math.max(...vals); const pad=(hi-lo||1)*0.12; lo-=pad; hi+=pad;
   const x=i=>m.l+(w-m.l-m.r)*(i/23), y=v=>h-m.b-(h-m.t-m.b)*((v-lo)/(hi-lo));
@@ -127,9 +131,50 @@ function dayChart(day, {w=980,h=340,series=["o","c","a","n"]}={}){
   return svg;
 }
 
-/* every replayed day, as the selected metric - navigator and accuracy history
-   in one. Models only; the observed price has no place on a metric axis. */
-function dayRibbon(metric,current,onPick,{w=980,h=92}={}){
+/* ── hero view 2: the running metric, cumulative / n, three models, no observed.
+   Every point is the metric over every hour from 2020-01-01 up to that day, so
+   the line is the whole-period figure settling rather than a daily score. ── */
+function runningChart(metric,{w=980,h=360}={}){
+  const m={t:14,r:80,b:26,l:56};
+  const series=MODELS.map(k=>({k,v:P.running[k][metric]}));
+  const vals=series.flatMap(s=>s.v.slice(30));       // first weeks are wild; ignore for scaling
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  const pad=(hi-lo||1)*0.15; lo=Math.max(0,lo-pad); hi+=pad;
+  const x=i=>m.l+(w-m.l-m.r)*(i/(DAYS.length-1));
+  const y=v=>h-m.b-(h-m.t-m.b)*Math.max(0,Math.min(1,(v-lo)/(hi-lo)));
+  const svg=S("svg",{viewBox:`0 0 ${w} ${h}`,width:"100%",style:`height:${h}px`});
+  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4;
+    svg.appendChild(S("line",{x1:m.l,x2:w-m.r,y1:y(v),y2:y(v),stroke:"var(--grid)","stroke-width":1}));
+    const t=S("text",{x:m.l-8,y:y(v)+4,"text-anchor":"end","font-size":11,fill:"var(--muted)"});
+    t.textContent=fmt(v,metric); svg.appendChild(t); }
+  YEARS.forEach(yr=>{ const i=DAYS.indexOf(yr+"-01-01"); if(i<0)return;
+    svg.appendChild(S("line",{x1:x(i),x2:x(i),y1:m.t,y2:h-m.b,stroke:"var(--grid)"}));
+    const t=S("text",{x:x(i)+4,y:h-8,"font-size":11,fill:"var(--muted)"}); t.textContent=yr; svg.appendChild(t); });
+  const lab=[];
+  series.forEach(s=>{
+    svg.appendChild(S("polyline",{fill:"none",stroke:COLOR[s.k],"stroke-width":2,"stroke-linejoin":"round",
+      "stroke-dasharray":s.k==="n"?"5 4":"",
+      points:s.v.map((v,i)=>`${x(i)},${y(v)}`).join(" ")}));
+    lab.push({y:y(s.v[s.v.length-1])+4, draw:ly=>{
+      const t=S("text",{x:w-m.r+6,y:ly,"font-size":11,fill:COLOR[s.k],"font-weight":600});
+      t.textContent=NAME[s.k]; svg.appendChild(t); }});
+  });
+  placeLabels(lab);
+  const cross=S("line",{y1:m.t,y2:h-m.b,stroke:"var(--axis)","stroke-width":1,opacity:0});
+  svg.appendChild(cross);
+  svg.addEventListener("mousemove",e=>{
+    const r=svg.getBoundingClientRect(), px=(e.clientX-r.left)/r.width*w;
+    const i=Math.max(0,Math.min(DAYS.length-1,Math.round((px-m.l)/((w-m.l-m.r)/(DAYS.length-1)))));
+    cross.setAttribute("x1",x(i)); cross.setAttribute("x2",x(i)); cross.setAttribute("opacity",1);
+    showTip(e, `through ${DAYS[i]} · ${(i+1)*24} periods\n`+
+      series.map(s=>`${NAME[s.k]}  ${fmt(s.v[i],metric)}`).join("\n"));
+  });
+  svg.addEventListener("mouseleave",()=>{cross.setAttribute("opacity",0);hideTip();});
+  return svg;
+}
+
+/* every replayed day as the selected metric - the navigator under the day view */
+function dayRibbon(metric,current,onPick,{w=980,h=88}={}){
   const m={t:8,r:6,b:16,l:6};
   const hi=Math.max(...DAYS.map(d=>P.dayMetrics[d].c[metric]));
   const x=i=>m.l+(w-m.l-m.r)*(i/(DAYS.length-1)), y=v=>h-m.b-(h-m.t-m.b)*Math.min(1,v/hi);
@@ -146,34 +191,13 @@ function dayRibbon(metric,current,onPick,{w=980,h=92}={}){
     const i=Math.round(((e.clientX-r.left)/r.width*w-m.l)/((w-m.l-m.r)/(DAYS.length-1)));
     return DAYS[Math.max(0,Math.min(DAYS.length-1,i))]; };
   svg.addEventListener("mousemove",e=>{const d=pick(e), M=METRICS[metric];
-    showTip(e,`${d}\n${M.label} ${P.dayMetrics[d].c[metric].toFixed(M.dp)} Chronos-2 · ${P.dayMetrics[d].n[metric].toFixed(M.dp)} naïve`);});
+    showTip(e,`${d}\n${M.label} ${fmt(P.dayMetrics[d].c[metric],metric)} Chronos-2 · ${fmt(P.dayMetrics[d].n[metric],metric)} naïve`);});
   svg.addEventListener("mouseleave",hideTip);
   svg.addEventListener("click",e=>onPick(pick(e)));
   return svg;
 }
 
-/* per-year MAE - the mandatory companion to any overall MAE (ADR-0006) */
-function yearBars({w=420,h=170}={}){
-  const m={t:14,r:8,b:22,l:38};
-  const hi=Math.max(...YEARS.flatMap(y=>MODELS.map(k=>P.byYear[y][k].mae)))*1.12;
-  const y=v=>h-m.b-(h-m.t-m.b)*(v/hi);
-  const gw=(w-m.l-m.r)/YEARS.length, bw=(gw-10)/MODELS.length;
-  const svg=S("svg",{viewBox:`0 0 ${w} ${h}`,width:"100%",style:`height:${h}px`});
-  [0,20,40,60].forEach(v=>{ if(v>hi)return;
-    svg.appendChild(S("line",{x1:m.l,x2:w-m.r,y1:y(v),y2:y(v),stroke:"var(--grid)"}));
-    const t=S("text",{x:m.l-6,y:y(v)+4,"text-anchor":"end","font-size":10,fill:"var(--muted)"});
-    t.textContent=v; svg.appendChild(t); });
-  YEARS.forEach((yr,i)=>{
-    MODELS.forEach((k,j)=>{ const v=P.byYear[yr][k].mae, bx=m.l+i*gw+5+j*bw;
-      const r=S("rect",{x:bx,y:y(v),width:bw-2,height:h-m.b-y(v),fill:COLOR[k],rx:3});
-      r.addEventListener("mousemove",e=>showTip(e,`${yr} · ${NAME[k]}\nMAE ${f1(v)}   rMAE ${f3(P.byYear[yr][k].rmae)}`));
-      r.addEventListener("mouseleave",hideTip); svg.appendChild(r); });
-    const t=S("text",{x:m.l+i*gw+gw/2,y:h-7,"text-anchor":"middle","font-size":11,fill:"var(--muted)"});
-    t.textContent=yr; svg.appendChild(t); });
-  return svg;
-}
-
-/* Diebold-Mariano: statistic per period ordinal, +/-1.96 band. Own card now. */
+/* Diebold-Mariano: statistic per period ordinal, +/-1.96 band. Own card. */
 function dmChart(model,{w=900,h=250}={}){
   const opp=MODELS.filter(k=>k!==model), m={t:14,r:80,b:24,l:40};
   const vals=opp.flatMap(o=>P.dm[`${model}_vs_${o}`]).concat([-2.5,2.5]);
@@ -203,21 +227,38 @@ function dmChart(model,{w=900,h=250}={}){
   return svg;
 }
 
-function scoreboard(){
+/* the complete table: every metric, every model, whole period then per year.
+   The per-year rows are what keep ADR-0006's "MAE never renders alone" rule
+   alive now that the per-year bar chart is gone. */
+function accuracyTable(){
   const t=el("table");
   t.appendChild(el("thead",{},[el("tr",{},[
-    el("th",{text:"Model"}),el("th",{text:"MAE EUR/MWh"}),el("th",{text:"rMAE vs naïve"})])]));
+    el("th",{text:"Model"}),el("th",{text:"MAE"}),el("th",{text:"RMSE"}),
+    el("th",{text:"SMAPE %"}),el("th",{text:"rMAE vs naïve"})])]));
   const tb=el("tbody");
-  MODELS.forEach(k=>{ const m=P.overall[k];
-    tb.appendChild(el("tr",{},[
-      el("td",{html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]}`}),
-      el("td",{text:f1(m.mae)}),
-      el("td",{text:f3(m.rmae),style:k==="c"?"font-weight:650":""})]));
-  });
+  const scope=(title,src,strong)=>{
+    tb.appendChild(el("tr",{class:"scope"},[el("td",{colspan:5,html:`<span>${title}</span>`})]));
+    MODELS.forEach(k=>{ const m=src[k];
+      tb.appendChild(el("tr",{},[
+        el("td",{html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]}`}),
+        el("td",{text:f1(m.mae)}), el("td",{text:f1(m.rmse)}), el("td",{text:f1(m.smape)}),
+        el("td",{text:f3(m.rmae),style:(strong&&k==="c")?"font-weight:650":""})]));
+    });
+  };
+  scope("All 1,827 days · 2020–2024", P.overall, true);
+  YEARS.forEach(y=>scope(y, P.byYear[y], false));
   t.appendChild(tb); return t;
 }
 
 function cap(text,extra=""){ return el("div",{class:"cap",text,style:"margin-bottom:8px;"+extra}); }
+
+function toggles(options,current,onPick){
+  const wrap=el("div",{class:"group"});
+  options.forEach(([key,label])=>{
+    const b=el("button",{class:"btn",text:label,"aria-pressed":String(key===current)});
+    b.onclick=()=>onPick(key); wrap.appendChild(b); });
+  return wrap;
+}
 
 function datePicker(day,onPick){
   const wrap=el("div",{style:"display:flex;gap:6px;align-items:center;flex-wrap:wrap"});
@@ -231,7 +272,6 @@ function datePicker(day,onPick){
   return wrap;
 }
 
-/* jumps worth a button, scoped to whichever metric is selected */
 function jumps(metric,onPick){
   const wrap=el("div",{style:"display:flex;gap:6px;align-items:center;flex-wrap:wrap"});
   const worst=el("button",{class:"btn",text:"worst day"});
@@ -244,17 +284,9 @@ function jumps(metric,onPick){
   return wrap;
 }
 
-/* the metric selector - governs the day's headline numbers and the ribbon */
-function metricPicker(metric,onPick){
-  const wrap=el("div",{style:"display:flex;gap:6px"});
-  Object.keys(METRICS).forEach(k=>{
-    const b=el("button",{class:"btn",text:METRICS[k].label,"aria-pressed":String(k===metric)});
-    b.onclick=()=>onPick(k); wrap.appendChild(b); });
-  return wrap;
-}
-
 /* ─────────────────────────── the page ─────────────────────────── */
 function Dashboard(state,render){
+  const M=METRICS[state.metric], onDay=state.view==="day";
   const root=el("div",{style:"max-width:1040px;margin:0 auto;padding:28px 20px 0"});
 
   const head=el("div",{style:"margin-bottom:16px"});
@@ -262,49 +294,57 @@ function Dashboard(state,render){
   head.appendChild(el("div",{class:"cap",text:"2020-01-01 – 2024-12-31 · EUR/MWh"}));
   root.appendChild(head);
 
-  /* hero: the day */
   const hero=el("div",{class:"card",style:"padding:18px 20px"});
-  const hrow=el("div",{style:"display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap"});
-  hrow.appendChild(el("h2",{text:state.day,style:"font-size:26px;letter-spacing:-0.02em"}));
-  hrow.appendChild(metricPicker(state.metric,m=>{state.metric=m;render();}));
-  hero.appendChild(hrow);
+  const bar=el("div",{style:"display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap"});
+  bar.appendChild(el("h2",{text:onDay?state.day:`${M.label} over time`,
+    style:"font-size:26px;letter-spacing:-0.02em"}));
+  const right=el("div",{style:"display:flex;gap:14px;flex-wrap:wrap;align-items:center"});
+  right.appendChild(toggles([["day","Day"],["time","Over time"]],state.view,v=>{state.view=v;render();}));
+  right.appendChild(toggles(Object.keys(METRICS).map(k=>[k,METRICS[k].label]),state.metric,
+    m=>{state.metric=m;render();}));
+  bar.appendChild(right);
+  hero.appendChild(bar);
 
-  const M=METRICS[state.metric];
-  const nums=el("div",{style:"display:flex;gap:26px;flex-wrap:wrap;margin:12px 0 4px"});
+  /* the numbers under the title: this day in Day view, the whole record in Over time */
+  const nums=el("div",{style:"display:flex;gap:26px;flex-wrap:wrap;margin:12px 0 6px"});
   MODELS.forEach(k=>{
-    const v=P.dayMetrics[state.day][k][state.metric];
+    const v=onDay ? P.dayMetrics[state.day][k][state.metric] : P.overall[k][state.metric];
     const b=el("div");
-    b.appendChild(el("div",{class:"cap",html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]} ${M.label}`}));
-    b.appendChild(el("div",{text:v.toFixed(M.dp)+" "+M.unit,
+    b.appendChild(el("div",{class:"cap",
+      html:`<span class="swatch" style="background:${COLOR[k]}"></span>${NAME[k]} ${M.label}`}));
+    b.appendChild(el("div",{text:fmt(v,state.metric)+" "+M.unit,
       style:"font-size:22px;font-weight:600;letter-spacing:-0.02em;font-variant-numeric:tabular-nums"}));
     nums.appendChild(b);
   });
   hero.appendChild(nums);
-  hero.appendChild(dayChart(state.day));
-  hero.appendChild(el("div",{style:"height:12px"}));
-  hero.appendChild(cap(`Every replayed day · Chronos-2 daily ${M.label} · click to jump`));
-  hero.appendChild(dayRibbon(state.metric,state.day,d=>{state.day=d;render();}));
-  hero.appendChild(el("div",{style:"height:12px"}));
-  const ctrl=el("div",{style:"display:flex;gap:16px;flex-wrap:wrap;align-items:center"});
-  ctrl.appendChild(datePicker(state.day,d=>{state.day=d;render();}));
-  ctrl.appendChild(jumps(state.metric,d=>{state.day=d;render();}));
-  hero.appendChild(ctrl);
+
+  if(onDay){
+    hero.appendChild(cap("Forecast against the observed price · EUR/MWh by period ordinal"));
+    hero.appendChild(dayChart(state.day));
+    hero.appendChild(el("div",{style:"height:12px"}));
+    hero.appendChild(cap(`Every replayed day · Chronos-2 daily ${M.label} · click to jump`));
+    hero.appendChild(dayRibbon(state.metric,state.day,d=>{state.day=d;render();}));
+    hero.appendChild(el("div",{style:"height:12px"}));
+    const ctrl=el("div",{style:"display:flex;gap:16px;flex-wrap:wrap;align-items:center"});
+    ctrl.appendChild(datePicker(state.day,d=>{state.day=d;render();}));
+    ctrl.appendChild(jumps(state.metric,d=>{state.day=d;render();}));
+    hero.appendChild(ctrl);
+  } else {
+    hero.appendChild(cap(`Running ${M.label} · every hour from 2020-01-01 up to that day`));
+    hero.appendChild(runningChart(state.metric));
+  }
   root.appendChild(hero);
 
-  /* accuracy over the whole record */
-  const acc=el("div",{class:"card",style:"margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:24px"});
-  const left=el("div"); left.appendChild(cap("Accuracy, all 1,827 days")); left.appendChild(scoreboard());
-  const right=el("div"); right.appendChild(cap("MAE by year — EUR/MWh")); right.appendChild(yearBars());
-  acc.appendChild(left); acc.appendChild(right);
+  const acc=el("div",{class:"card",style:"margin-top:16px"});
+  acc.appendChild(cap("Accuracy"));
+  acc.appendChild(accuracyTable());
   root.appendChild(acc);
 
-  /* significance, its own card */
   const dm=el("div",{class:"card",style:"margin-top:16px"});
   dm.appendChild(cap("Diebold–Mariano statistic by period ordinal — "+NAME[state.dmModel]));
-  const sel=el("div",{style:"display:flex;gap:6px;margin-bottom:10px"});
-  MODELS.forEach(k=>{ const b=el("button",{class:"btn",text:NAME[k],"aria-pressed":String(k===state.dmModel)});
-    b.onclick=()=>{state.dmModel=k;render();}; sel.appendChild(b); });
-  dm.appendChild(sel); dm.appendChild(dmChart(state.dmModel));
+  dm.appendChild(el("div",{style:"margin-bottom:10px"},[
+    toggles(MODELS.map(k=>[k,NAME[k]]),state.dmModel,k=>{state.dmModel=k;render();})]));
+  dm.appendChild(dmChart(state.dmModel));
   root.appendChild(dm);
 
   root.appendChild(el("footer",{html:
@@ -312,7 +352,7 @@ function Dashboard(state,render){
   return root;
 }
 
-const state={ day:"2022-08-26", metric:"mae", dmModel:"c" };
+const state={ view:"day", day:"2022-08-26", metric:"mae", dmModel:"c" };
 function render(){
   const root=document.getElementById("root");
   root.innerHTML=""; root.appendChild(Dashboard(state,render));

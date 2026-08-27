@@ -85,8 +85,33 @@ def day_metrics(d):
             for h in range(24) if abs(days[d]["o"][h])+abs(days[d][m][h])>0]
         out[m]={"mae":sum(errs)/24,"rmse":math.sqrt(sum(sq)/24),
                 "smape":(sum(sm)/len(sm)) if sm else 0.0}
+    for m in MODELS:                       # rMAE of a single day, naive as denominator
+        out[m]["rmae"]=out[m]["mae"]/out["n"]["mae"] if out["n"]["mae"] > 0 else 0.0
     return out
 day_mae = {d: day_metrics(d) for d in allday}
+
+# running metrics: cumulative over every hour up to and including each day, so the
+# line shows how the whole-period figure settles rather than how one day scored
+def running():
+    acc={m:{"abs":0.0,"sq":0.0,"smape":0.0,"nsm":0} for m in MODELS}
+    n=0; out={m:{k:[] for k in ("mae","rmse","smape","rmae")} for m in MODELS}
+    for d in allday:
+        for h in range(24):
+            o=days[d]["o"][h]
+            for m in MODELS:
+                e=o-days[d][m][h]
+                acc[m]["abs"]+=abs(e); acc[m]["sq"]+=e*e
+                if abs(o)+abs(days[d][m][h])>0:
+                    acc[m]["smape"]+=200*abs(e)/(abs(o)+abs(days[d][m][h])); acc[m]["nsm"]+=1
+        n+=24
+        for m in MODELS:
+            out[m]["mae"].append(acc[m]["abs"]/n)
+            out[m]["rmse"].append(math.sqrt(acc[m]["sq"]/n))
+            out[m]["smape"].append(acc[m]["smape"]/acc[m]["nsm"] if acc[m]["nsm"] else 0.0)
+        for m in MODELS:
+            out[m]["rmae"].append(out[m]["mae"][-1]/out["n"]["mae"][-1])
+    return out
+run = running()
 
 r1 = lambda xs: [round(x, 1) for x in xs]
 payload = {
@@ -94,6 +119,7 @@ payload = {
     "days": {d: {k: r1(v) for k, v in days[d].items()} for d in allday},
     "overall": overall, "byYear": by_year, "byMonth": by_month,
     "dm": {k: [round(x, 3) for x in v] for k, v in dm_stats.items()},
+    "running": {m: {k: [round(x, 4) for x in v] for k, v in run[m].items()} for m in MODELS},
     "dayMetrics": {d: {m: {k: round(x, 2) for k, x in v[m].items()} for m in MODELS}
                    for d, v in day_mae.items()},
     "labels": {"c": "Chronos-2", "a": "AR-168", "n": "Naive"},
