@@ -102,10 +102,20 @@ The benchmark every accuracy claim is measured against: the observed price for
 the same period ordinal on the previous delivery day. It is a model like any
 other, and it is also the v1 placeholder. It is deliberately *not* the seasonal
 naïve standard in the forecasting literature, which makes rMAE here weaker than
-the published convention — so rMAE is always rendered "vs day-lag naïve", never
-bare. The qualifier appears once per view, carrying every figure beneath it,
-rather than once per figure. See ADR-0003 and ADR-0006.
-_Avoid_: naïve, benchmark, baseline (unqualified)
+the published convention. rMAE nevertheless **renders bare** on the dashboard:
+what carries the meaning is this model's own row, sitting at exactly rMAE 1.000
+beside the others, and the non-comparability disclosure lives in the README. The
+interface labels it **"Naïve"**; the slug is `daylag` and prose outside the app
+says day-lag naïve. See ADR-0003, ADR-0006 and ADR-0007.
+_Avoid_: benchmark, baseline (unqualified)
+
+**Running metric**:
+An accuracy figure computed over every delivery period from the start of the
+record up to and including a given delivery day — a cumulative sum divided by the
+count of periods, not a rolling window. Plotted across the record it shows a
+whole-period figure settling rather than a day being scored, which is how the
+dashboard exposes the 2022 distortion without a per-year breakdown. See ADR-0007.
+_Avoid_: rolling, moving average, cumulative metric
 
 **Backtest**:
 A forecast run replayed over a delivery day whose observed price is already

@@ -4,6 +4,10 @@ status: accepted
 
 # The record discloses itself: no prose on the dashboard, no exclusions in the figures
 
+> **Amended by [ADR-0007](0007-the-dashboards-ten-second-story.md).** Building the
+> dashboard removed three of this ADR's rules: the hero triple, the
+> per-year-breakdown-adjacent rule, and the rMAE qualifier. The rest stands.
+
 The scoreboard leads with a **triple** — the headline model's MAE, the day-lag
 naïve's MAE, and the rMAE ratio between them — scoped to the whole replay,
 2020-01-01 → 2024-12-31. rMAE is the visually dominant element; the two MAEs are
