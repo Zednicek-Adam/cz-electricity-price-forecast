@@ -4,6 +4,10 @@ status: accepted
 
 # v1 ships three models, and a port is judged against its specification
 
+> **Partly amended by [ADR-0007](0007-the-dashboards-ten-second-story.md):** rMAE
+> now renders bare in the app; the naïve's own 1.000 row carries the
+> qualification, and the non-comparability disclosure stays in the README.
+
 v1 carries exactly three models, all univariate, all behind ADR-0002's
 pure-function seam:
 
