@@ -103,7 +103,8 @@ the same period ordinal on the previous delivery day. It is a model like any
 other, and it is also the v1 placeholder. It is deliberately *not* the seasonal
 naïve standard in the forecasting literature, which makes rMAE here weaker than
 the published convention — so rMAE is always rendered "vs day-lag naïve", never
-bare. See ADR-0003.
+bare. The qualifier appears once per view, carrying every figure beneath it,
+rather than once per figure. See ADR-0003 and ADR-0006.
 _Avoid_: naïve, benchmark, baseline (unqualified)
 
 **Backtest**:
@@ -152,6 +153,11 @@ Metric names are stored **unqualified** — `mae`, `rmse`, `smape`, `rmae` — s
 section is the definition of record for what each one meant. Transcribed from
 `epf-diploma/models/_utils.R`; `e = observed − forecast` over the delivery periods
 in scope.
+
+The project's public documentation restates these formulas for a general reader.
+That restatement is **derived**: this section stays the definition of record, and
+where the two disagree the public document is the one that is wrong. See
+ADR-0006.
 
 **MAE** — mean absolute error, in EUR/MWh.
 
