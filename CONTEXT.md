@@ -202,3 +202,37 @@ that `model_a` is more accurate than `model_b`**, so a small `p_value` means
 `model_a` wins. The statistic is antisymmetric between the two directions; the
 p-values are complementary, not negated. See ADR-0005.
 _Avoid_: significance test, DM p-value (unqualified)
+
+### The interface
+
+**Hero chart** — the single chart the dashboard leads with, carrying two views
+switched in place and sharing one metric selector (ADR-0007). There is exactly
+one; a second chart competing with it is a design error, not a feature.
+_Avoid_: main chart, primary graph
+
+**Day view** — the hero chart showing the **observed price** against all three
+models over the 24 period ordinals of one delivery day, priced in EUR/MWh.
+
+**Over time view** — the hero chart showing the **running metric** for the three
+models across every replayed delivery day. It carries no observed line: on a
+metric axis the observed price is the zero the metric is measured from, not a
+series.
+_Avoid_: history view, trend view
+
+**Ribbon** — the selected metric for the headline model on every replayed
+delivery day, drawn as one continuous filled area beneath the Day view. It is
+**a control, not a picture**: clicking it jumps to that day, which is why the
+dashboard has no separate accuracy-history visual. It is deliberately
+mouse-only — see **day navigator**.
+_Avoid_: sparkline, timeline, history strip
+
+**Day navigator** — the set of controls that select which delivery day the Day
+view shows: the ribbon, a date stepper, and **worst day / best day / random**,
+all scoped to the selected metric. The stepper and the three buttons are the
+navigator's **accessible** form and are load-bearing for that reason: the ribbon
+is `aria-hidden` and keyboard-inert precisely because they duplicate its picker
+function (ADR-0009). Removing them obliges making the ribbon a real slider.
+
+**Metric selector** — the single control choosing between MAE, RMSE, SMAPE and
+rMAE. It governs both views of the hero chart, the headline numbers, and the day
+navigator together; there is no per-element metric choice.
