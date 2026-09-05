@@ -1,0 +1,22 @@
+Electricity price data sourced from the ENTSO-E Transparency Platform
+(https://transparency.entsoe.eu/). ENTSO-E does not endorse this project and is
+not responsible for its content or for any forecasts derived from the data.
+
+Dataset:   cz-day-ahead-prices.csv
+Series:    Day-ahead prices (Transparency Regulation article 12.1.d),
+           bidding zone BZN|CZ (10YCZ-CEPS-----N), EUR/MWh
+Extract:   delivery day 2018-01-01 through 2024-12-31, Europe/Prague
+           (delivery periods 2017-12-31T23:00:00Z through 2024-12-31T22:00:00Z)
+Provenance: derived from seven annual GUI_ENERGY_PRICES CSV exports downloaded
+           from the Transparency Platform for the diploma thesis this project
+           builds on, retrieved into this repository on 2026-09-02.
+           No price value was altered; see README.md in this directory.
+
+Re-use is under the Transparency Platform General Terms and Conditions. On a
+request from ENTSO-E or from the Primary Owner of Data, this series will be
+withdrawn from public display promptly and without argument; see the repository
+README for the maintainer contact.
+
+ENTSO-E performs no control on the accuracy, currency or consistency of the data
+published on the Transparency Platform, and the Data User uses it under sole
+responsibility (General Terms and Conditions, clause 6).
