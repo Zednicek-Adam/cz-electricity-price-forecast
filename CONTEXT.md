@@ -37,8 +37,8 @@ _Avoid_: granularity, frequency
 **Average Rule price**:
 An hourly price derived by averaging the four quarter-hourly prices of the same
 hour, rather than cleared as an hourly product. Every Czech hourly price from
-delivery day 2025-10-01 onward is one. Not a continuation of the traded hourly
-series — a different object that shares its shape.
+delivery day 2025-10-01 onward is one. It is derived on the way into the store
+and carried as a continuation of the traded hourly series. See ADR-0011.
 
 ### Prices and forecasts
 
@@ -57,6 +57,13 @@ _Avoid_: actual, actual price, real price, spot price, historical price
 A predicted price for a delivery period, attributed to the forecast run that
 produced it. There may be many per delivery period — one per model, per run.
 _Avoid_: prediction, estimate
+
+**Pending forecast**:
+The one standing forecast whose delivery day's price has not been published yet,
+so it carries no accuracy figure. There is exactly one at a time: each daily run
+scores the forecast the previous run made and leaves a new one pending. It is
+the only thing on the dashboard that is a claim rather than a record.
+_Avoid_: live forecast (that is a `run_type`), current forecast, upcoming
 
 **Forecast run**:
 One execution of **one model** for **one delivery day**, producing 24 forecasts.
@@ -151,6 +158,20 @@ the observed prices it derives from — so grid repair has exactly one
 implementation. It is what the models are fed and what forecasts are scored
 against. See ADR-0005.
 _Avoid_: repaired series (unqualified), model input, adjusted price
+
+**Ingest**:
+Bringing published observed prices into the store. It **reconciles**: it works
+out which delivery days are missing and fetches only those, so it never re-reads
+a day it already holds and a missed day heals itself on the next run. Loading
+years of history is the same act with a wider range, not a separate capability.
+See ADR-0011.
+_Avoid_: fetch, scrape, import, sync, backfill
+
+**Repair**:
+The deliberate, human-invoked re-fetch of a named range of delivery days, which
+may overwrite what is stored. It is the only path that ever overwrites an
+observed price, and it never produces a forecast. See ADR-0011.
+_Avoid_: correction, fix, reconcile (that is what ingest does)
 
 **Provenance**:
 Where an observed price came from and when it was retrieved. Carried on the row,
