@@ -61,8 +61,12 @@ _Avoid_: prediction, estimate
 **Pending forecast**:
 The one standing forecast whose delivery day's price has not been published yet,
 so it carries no accuracy figure. There is exactly one at a time: each daily run
-scores the forecast the previous run made and leaves a new one pending. It is
-the only thing on the dashboard that is a claim rather than a record.
+scores the forecast the previous *successful* run made and leaves a new one
+pending. After a failed daily run that is the run from two days before, not
+yesterday — the invariant is one pending forecast, not one per calendar day. It
+is the only thing on the dashboard that is a claim rather than a record, and its
+delivery day going stale is how a stopped daily run becomes visible. See
+ADR-0012.
 _Avoid_: live forecast (that is a `run_type`), current forecast, upcoming
 
 **Forecast run**:
@@ -72,6 +76,14 @@ about — it holds no store connection and no clock, so it cannot read past its
 cutoff. Every run is marked `backtest` or `live`, and the two are never pooled
 into one accuracy figure. See ADR-0002.
 _Avoid_: batch, job, execution
+
+**Daily run**:
+The scheduled execution, once per calendar day, of ingest then scoring then
+forecasting. It contains one forecast run per model, so it is the container and
+not itself a run of anything. It is the system's only automated path: everything
+corrective — repair, replay, restarting the schedule after it is disabled — is
+human-invoked. See ADR-0011 for what it does, ADR-0012 for what fires it.
+_Avoid_: job, cron, pipeline, daily forecast
 
 **Cutoff**:
 The boundary on what a forecast run may know, derived from its target delivery
