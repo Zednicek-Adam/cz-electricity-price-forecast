@@ -1,0 +1,3 @@
+# The frozen dataset is checked out byte-for-byte, so its recorded size and
+# hash hold on every platform (data/README.md).
+*.csv text eol=lf
