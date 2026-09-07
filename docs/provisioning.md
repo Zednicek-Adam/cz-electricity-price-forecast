@@ -1,9 +1,8 @@
 # Provisioning: the human-only gates
 
-The runbook for [issue #38](https://github.com/Zednicek-Adam/cz-electricity-price-forecast/issues/38).
-ADR-0013 decides *what* has to be provisioned and *when*; this file is the click
-path and the exact command for each row, so a gate is opened once rather than
-re-derived every time one blocks a ticket.
+The runbook for [issue #38][i38]. ADR-0013 decides *what* has to be provisioned
+and *when*; this file is the click path and the exact command for each row, so a
+gate is opened once rather than re-derived every time one blocks a ticket.
 
 Every row here is a step **no agent session can perform**, and every row gates
 everything behind it. The checklist is standing: it spans phases 0 through 3 and
@@ -19,10 +18,16 @@ anywhere in v1** — v1 reads the frozen dataset in `data/`, and `amazon/chronos
 is a public Apache-2.0 artifact. The ENTSO-E token stays in the gitignored `.env`
 for the live branch, and nothing in v1 reads it.
 
-## The two hazards, before you start
+Two conventions for the commands below. They assume `gh` is on your `PATH` — on
+Windows it installs to `C:\Program Files\GitHub CLI`, which Git Bash does not
+always pick up. And when you generate a role password, **use alphanumerics
+only**: the password is spliced into a connection URL, and a `@`, `:`, `/`, `?`,
+`#` or `%` in it has to be percent-encoded or the URL silently parses wrong.
 
-Two things below will not announce themselves when you get them wrong. Both are
-worth reading before the first row rather than after the failing one.
+## The three hazards, before you start
+
+None of these announces itself when you get it wrong. All three are worth reading
+before the first row rather than after the failing one.
 
 **A Neon role created in the Console is not restricted.** Neon's documentation is
 explicit: roles created through the Console, CLI or API are automatically granted
@@ -34,15 +39,24 @@ otherwise the reader row's "restricted to `SELECT`" is false the moment it is
 ticked, and nothing downstream would ever catch it, because a superuser reader
 passes every test a restricted one passes.
 
-**The `GRANT` migration fails if the role does not exist.** ADR-0005 puts every
+**The reader role is needed in phase 1, not phase 2.** ADR-0005 puts every
 `GRANT` in a migration, which is why `migrate` connects as owner. But a migration
-that grants to `app_reader` errors if `app_reader` has not been created yet — and
-`migrate` runs on every merge to `main` from phase 0 onward. The phases below say
-when each *credential* is first needed; the *role* must exist before the
-migration that grants to it lands. If the grant migration for the reader lands in
-phase 1 with the five tables (#42), create the reader role then, ahead of its
-phase-2 row here. Creating all three roles in one sitting at phase 0 costs
-nothing and removes the hazard.
+that grants to a role errors if the role does not exist, and #42 — "the reader
+role's `SELECT` grant lives in a migration" — lands in **phase 1**, with the five
+tables. So the reader must be created before #42's migration first runs on a
+merge to `main`. This **narrows ADR-0013's provisioning table**, which files the
+reader under phase 2: the *credential* is first consumed in phase 2 by the API,
+but the *role* has to exist a phase earlier. Creating all three roles in one
+sitting at phase 0 costs nothing and removes the hazard entirely.
+
+**No ticket grants the writer.** #42 carries the reader's `SELECT` grant and
+nothing else; no open issue mentions a `GRANT` at all. A role created with
+`CREATE ROLE` holds only what `PUBLIC` holds, which is no access to any table —
+so the writer row below can be ticked with a credential that cannot write, and
+the failure surfaces in #47's replay rather than here. Whoever writes #42's
+migration should carry the writer's `INSERT`/`UPDATE`/`DELETE`/`SELECT` and its
+sequence usage alongside the reader's `SELECT`, or #38's writer row is ticked
+against a role that does nothing. This is a gap in the tickets, not in ADR-0005.
 
 ## Names
 
@@ -55,7 +69,7 @@ session reads it here instead of guessing.
 |---|---|---|---|
 | Neon **owner** URL | `production` GitHub Environment | *(unset)* | #40, the `migrate` job |
 | Neon **writer** URL | local `.env` and the same Environment | *(unset)* | #47, the replay workflow |
-| Neon **reader** URL | the Worker, via `wrangler secret put` | *(unset)* | #53, the deploy |
+| Neon **reader** URL | `api/.dev.vars`, then the Worker | *(unset)* | #49, then #53 |
 | Cloudflare API token | the same Environment | `CLOUDFLARE_API_TOKEN` | Cloudflare's own docs |
 | Cloudflare account id | the same Environment | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare's own docs |
 
@@ -70,9 +84,7 @@ this file agree with it.
 Placeholders in the commands below read `<OWNER-SECRET-NAME>`,
 `<WRITER-SECRET-NAME>` and `<READER-SECRET-NAME>`. Substitute, don't paste.
 
----
-
-## Phase 0
+## Phase 0 — open the gate and stand up the store
 
 ### Flip the repository public
 
@@ -86,7 +98,7 @@ than aesthetic.
 First, confirm the history is clean. Both commands must print nothing:
 
 ```sh
-git log --all --full-history --oneline -- .env
+git log --all --full-history --oneline -- '*.env'
 git log --all --full-history --oneline -- analysis/raw
 ```
 
@@ -102,7 +114,13 @@ public forks, can disable push rulesets, and opens Actions history and logs to
 anyone. On this repository, at this point in the build, all three are fine — but
 read them rather than skipping past them.
 
-**Verify:** `gh repo view --json visibility` prints `PUBLIC`.
+**Verify:**
+
+```sh
+gh repo view Zednicek-Adam/cz-electricity-price-forecast --json visibility
+```
+
+prints `{"visibility":"PUBLIC"}`.
 
 ### Create the Neon project
 
@@ -152,9 +170,7 @@ gh secret set <OWNER-SECRET-NAME> --env production
 
 **Verify:** `gh secret list --env production` lists the name.
 
----
-
-## Phase 1
+## Phase 1 — the credential the replay runs as
 
 ### Writer role → local `.env`, then the same Environment
 
@@ -166,11 +182,12 @@ Create the role **in the SQL Editor, connected as the owner** — not with **Add
 role**, for the reason in the hazards section:
 
 ```sql
-CREATE ROLE app_writer WITH LOGIN PASSWORD '<generate-a-long-random-password>';
+CREATE ROLE app_writer WITH LOGIN PASSWORD '<long-random-alphanumeric>';
 ```
 
-That is the whole manual step. No `GRANT` here: the writer's privileges arrive in
-a migration, run by the owner.
+That is the whole manual step. No `GRANT` by hand: the writer's privileges belong
+in a migration, run by the owner — but read the third hazard first, because no
+ticket currently carries that migration.
 
 Neon will not show you a connection string for a role it did not create, so build
 it from the owner's by swapping the role and password and leaving the host,
@@ -182,7 +199,7 @@ postgresql://app_writer:<password>@ep-<id>.eu-central-1.aws.neon.tech/neondb?ssl
 
 Put it in local `.env` (already gitignored, and never committed on any branch):
 
-```sh
+```dotenv
 <WRITER-SECRET-NAME>=postgresql://app_writer:...
 ```
 
@@ -192,38 +209,33 @@ and in the Environment:
 gh secret set <WRITER-SECRET-NAME> --env production
 ```
 
-**Verify:** in the SQL Editor,
-
-```sql
-select rolname, rolsuper, rolcreaterole, rolcreatedb from pg_roles
-where rolname = 'app_writer';
-```
-
-shows the role, and
+**Verify** in two directions. That the role is not over-privileged:
 
 ```sql
 select pg_has_role('app_writer', 'neon_superuser', 'member');
 ```
 
-returns `false`. If it returns `true`, the role was created in the Console: drop
-it and create it again in SQL.
+must return `false` — if it returns `true` the role was created in the Console,
+so drop it and create it again in SQL. And that it is privileged enough: connect
+with the writer URL once the grant migration has run, and insert and delete a row
+in `observed_price`. A writer that cannot write passes every check above.
 
----
-
-## Phase 2
+## Phase 2 — the credential the API reads as
 
 ### Reader role, restricted to `SELECT`
 
 **Gates** the API. This is the row the Console silently breaks, so run the same
-check as above and mean it.
+check as the writer's and mean it. Note the second hazard: the role itself is
+wanted a phase earlier than this row sits.
 
 ```sql
-CREATE ROLE app_reader WITH LOGIN PASSWORD '<generate-a-long-random-password>';
+CREATE ROLE app_reader WITH LOGIN PASSWORD '<long-random-alphanumeric>';
 ```
 
-Again, no `GRANT` by hand. The migration grants `CONNECT`, `USAGE` on the schema,
-and `SELECT` — and nothing else, which is what "restricted to `SELECT`" means
-here. Neon's own read-only-role shape, for the migration author's reference:
+Again, no `GRANT` by hand. #42's migration grants `CONNECT`, `USAGE` on the
+schema, and `SELECT` — no `INSERT`, `UPDATE` or `DELETE` anywhere, which is what
+"restricted to `SELECT`" means here. Neon's own read-only-role shape, for that
+migration's author:
 
 ```sql
 GRANT CONNECT ON DATABASE neondb TO app_reader;
@@ -237,31 +249,43 @@ expensive to miss: without it the reader can select from today's tables and not
 from the ones a later migration adds, and the failure surfaces as an endpoint
 that works locally and 500s in production.
 
+"Restricted to `SELECT`" is a statement about tables, not about everything. A
+freshly created role also inherits whatever `PUBLIC` holds — `CONNECT` and `TEMP`
+on the database, `USAGE` on the `public` schema — which is why the first two
+grants above are close to redundant. If you want the stricter reading, the
+migration is also where a `REVOKE ... FROM PUBLIC` would go; v1 does not need it,
+since `PUBLIC` reaches no table.
+
 Build the reader's connection string the same way as the writer's — but for the
 Worker, **leave connection pooling on** and use the `-pooler` host. Neon
 recommends the pooled string for serverless workloads, which is exactly what a
-Worker is. It does not go anywhere yet; phase 3 puts it in the Worker.
+Worker is.
+
+The reader URL is needed locally in this phase, before it is ever deployed: #49
+runs the Hono app under `wrangler dev` against Neon as the reader, and `wrangler`
+reads local secrets from **`api/.dev.vars`**. Put it there, and make sure that
+file is gitignored. Phase 3 puts the same value into the deployed Worker, by a
+different route.
 
 **Verify**, connected as `app_reader` once the grant migration has run: a
 `select` on a table returns rows, and an `insert` into any table fails with a
 permissions error. A reader that can insert is not a reader.
 
----
-
-## Phase 3
+## Phase 3 — Cloudflare, and the one secret GitHub never sees
 
 ### Cloudflare account
 
-**Gates** any deploy. Sign up at <https://dash.cloudflare.com/sign-up>. The Free
-plan is what ADR-0004 costed; nothing here needs more.
-
-Do this row **after** #52 has re-verified Static Assets against current
-documentation. If that finding sends the deployment to Pages plus a routed
-Worker, the token permissions in the next row change with it.
+**Gates** any deploy. Sign up at <https://dash.cloudflare.com/sign-up>. The free
+tier is what ADR-0004 assumed across all three vendors; nothing here needs more.
 
 ### `CLOUDFLARE_API_TOKEN` and the account id → the same Environment
 
 **Gates** the `deploy` and preview jobs.
+
+Do this row **after** #52 has re-verified Static Assets against current
+documentation. The account above can be created any time, but the token's
+permissions follow the deployment shape: if #52's finding sends v1 to Pages plus
+a routed Worker, the template below is the wrong one.
 
 1. Open <https://dash.cloudflare.com/profile/api-tokens> and select **Create
    Token**.
@@ -308,14 +332,18 @@ npx wrangler secret put <READER-SECRET-NAME>
 **Verify:** `npx wrangler secret list` shows the name, and the deployed endpoint
 returns rows rather than a connection error.
 
----
-
 ## Not in this checklist
 
-ADR-0013's provisioning table has two more phase-3 rows that #38 does not carry,
-because they are build steps with their own tickets rather than human-only gates:
+ADR-0013's provisioning table has two more phase-3 rows that #38 does not carry:
 the **root README** with issue #20's four obligations (#51, due before the first
 pull request that touches `web/`) and the **persistent dashboard footer
 attribution** (#53). Both come due at the first preview deploy, because a
 Cloudflare preview URL is publicly reachable whatever the repository's
 visibility.
+
+ADR-0013 is inconsistent about them: it heads that table "every row is a step no
+agent session can perform", then lists two rows that are ordinary build steps an
+agent does perform. #38 resolves the inconsistency in favour of the heading, and
+this file follows #38. Nothing is lost — both rows have their own tickets.
+
+[i38]: https://github.com/Zednicek-Adam/cz-electricity-price-forecast/issues/38
