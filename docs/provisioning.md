@@ -60,16 +60,18 @@ against a role that does nothing. This is a gap in the tickets, not in ADR-0005.
 
 ## Names
 
-Nothing in the ADRs fixes the secret names, and this file deliberately does not
+Nothing in the ADRs fixed the secret names ahead of time. The three Neon names
+below were settled when the roles were provisioned; the tickets that consume them
+(#40, #47, #49, #53) must use exactly these. This file deliberately does not
 invent them. Each name is fixed by whichever ticket first consumes the value —
 **write the name back into this table when that ticket lands**, so the next
 session reads it here instead of guessing.
 
 | Value | Lives in | Name | Fixed by |
 |---|---|---|---|
-| Neon **owner** URL | `production` GitHub Environment | *(unset)* | #40, the `migrate` job |
-| Neon **writer** URL | local `.env` and the same Environment | *(unset)* | #47, the replay workflow |
-| Neon **reader** URL | `api/.dev.vars`, then the Worker | *(unset)* | #49, then #53 |
+| Neon **owner** URL | `production` GitHub Environment | `NEON_OWNER` | provisioned 2026-09-07 |
+| Neon **writer** URL | local `.env` and the same Environment | `NEON_WRITER` | provisioned 2026-09-07 |
+| Neon **reader** URL | `api/.dev.vars`, then the Worker | `NEON_READER` | provisioned 2026-09-07 |
 | Cloudflare API token | the same Environment | `CLOUDFLARE_API_TOKEN` | Cloudflare's own docs |
 | Cloudflare account id | the same Environment | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare's own docs |
 
