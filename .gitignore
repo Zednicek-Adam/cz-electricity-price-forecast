@@ -3,3 +3,12 @@ __pycache__/
 analysis/raw/
 .scratch-*/
 */.dev.vars
+
+# Python, under uv
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# TypeScript, under pnpm
+node_modules/
+dist/

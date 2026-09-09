@@ -1,0 +1,48 @@
+# Local development needs Docker for exactly one thing: Postgres (ADR-0004).
+# `uv`, `pnpm`, `wrangler dev` and Vite all run natively.
+#
+# The `dbmate` service is here for a second reason. dbmate shells out to
+# `pg_dump` to regenerate `db/schema.sql`, and `pg_dump` refuses to dump a
+# server newer than itself - so running it in a container pins the dump to a
+# client that matches the server, on every machine and in CI alike. That is
+# what makes the pull request gate's "regenerated schema matches the committed
+# one" check (ADR-0010) a real check rather than a version-skew alarm.
+services:
+  db:
+    # Track whatever version the Neon project runs; CI uses this same image, so
+    # migrations and persistence tests have one code path. Pinned to the patch
+    # because `pg_dump` writes the server version into `db/schema.sql`, so a
+    # floating tag would make the gate's "the regenerated schema matches the
+    # committed one" check fail on an unrelated Postgres release. Bumping this
+    # is a commit that also regenerates the schema file.
+    image: postgres:17.11
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: czepf
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d czepf"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  dbmate:
+    image: ghcr.io/amacneil/dbmate:2.35.1
+    profiles:
+      - tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/czepf?sslmode=disable
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_SCHEMA_FILE: /db/schema.sql
+    volumes:
+      - ./db:/db
+
+volumes:
+  db-data:

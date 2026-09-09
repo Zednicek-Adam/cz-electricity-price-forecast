@@ -1,3 +1,8 @@
 # The frozen dataset is checked out byte-for-byte, so its recorded size and
 # hash hold on every platform (data/README.md).
 *.csv text eol=lf
+
+# `db/schema.sql` is regenerated inside the dbmate container, which writes LF.
+# The pull request gate compares the regenerated file against this one byte for
+# byte (ADR-0010), so it must not be checked out with CRLF on Windows.
+db/schema.sql text eol=lf
