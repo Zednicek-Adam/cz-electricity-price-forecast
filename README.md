@@ -6,9 +6,16 @@ once it is known.
 
 `CONTEXT.md` fixes the vocabulary; `docs/adr/` holds the decisions; ADR-0013 is
 the build order. This README carries only what a developer needs to run the
-repository locally — the project's narrative, its attribution obligations and
-its accuracy disclosures land here in phase 3 (issue #51), before the first
-pull request that touches `web/`.
+repository locally. The project's narrative, its accuracy disclosures and
+issue #20's attribution obligations land here in phase 3 (issue #51).
+
+ADR-0013 dates those obligations "before the first pull request that touches
+`web/`", and this is that pull request. They are deferred anyway, deliberately:
+what the date is a proxy for is the **first preview deploy**, which is what
+makes the dashboard publicly reachable, and no preview deploy exists until
+phase 3 builds the `deploy` job. Until then `data/NOTICE` carries the
+attribution, the no-endorsement line and the take-down commitment beside the
+data they cover.
 
 ## The four units
 
@@ -32,21 +39,23 @@ Most of this is still scaffolding. Nothing forecasts and nothing renders yet.
 [uv](https://docs.astral.sh/uv/getting-started/installation/). No local
 Postgres client and no local `dbmate` — both run in containers.
 
-Three commands take a clone to a running local database:
+Three commands take a clone to a migrated local database:
 
 ```sh
-pnpm install                                                 # api/ and web/
-uv sync --project forecast                                   # forecast/
-docker compose up -d db && docker compose run --rm dbmate up # db/
+pnpm install && uv sync --project forecast   # the two toolchains
+docker compose up -d db                      # Postgres
+docker compose run --rm dbmate up            # apply db/migrations/
 ```
 
-Docker is needed for exactly one thing — Postgres. `uv`, `pnpm`, `wrangler dev`
-and Vite all run natively (ADR-0004).
+Nothing is *developed* inside a container: `uv`, `pnpm`, `wrangler dev` and
+Vite all run natively (ADR-0004). Docker runs Postgres, and runs `dbmate` as a
+one-shot for the reason the next section gives.
 
 The database listens on `localhost:5432` as
-`postgres://postgres:postgres@localhost:5432/czepf`. It is the same Postgres
-image CI uses, so migrations and persistence tests have one code path rather
-than two (ADR-0010).
+`postgres://postgres:postgres@localhost:5432/czepf`. `docker-compose.yml` is
+where its version is fixed; the pull request gate runs against the same image,
+so migrations and persistence tests have one code path rather than two
+(ADR-0010).
 
 ### Migrations
 
@@ -61,9 +70,18 @@ docker compose run --rm dbmate up                      # apply, and rewrite db/s
 docker compose run --rm dbmate dump                    # rewrite db/schema.sql alone
 ```
 
-`dbmate` runs in a container so that `pg_dump` always matches the server it
-dumps; a `pg_dump` from a different release rewrites `db/schema.sql` for
-reasons that have nothing to do with the migration.
+`dbmate` runs in a container so that `pg_dump` is pinned: it writes its own
+version and the server's into the dump, so a `pg_dump` from a different release
+rewrites `db/schema.sql` for reasons that have nothing to do with the
+migration. Both images are pinned to the patch for that reason, and bumping
+either is a commit that regenerates the schema file.
+
+`db/schema.sql` is a record of what the migrations add up to, so that a pull
+request changing the cross-language contract shows that change in its diff
+(ADR-0005). It is never applied: the migrations are. It is also written by
+`pg_dump` 18, so it carries `
+estrict` meta-commands that an older `psql`
+cannot read.
 
 Migrations against Neon run from GitHub Actions on merge to `main`, as the
 owner role. `dbmate down` is never run against Neon (ADR-0010).
@@ -77,6 +95,10 @@ cd forecast && uv run ruff check . && uv run ruff format --check . && uv run pyt
 pnpm typecheck && pnpm lint && pnpm test
 docker compose run --rm dbmate up   # then: git diff --exit-code db/schema.sql
 ```
+
+Ruff's scope is the `forecast/` unit. `data/` and `analysis/` hold one-off
+scripts that ran once and are kept for their provenance, and they are outside
+the gate deliberately.
 
 ### Stopping
 

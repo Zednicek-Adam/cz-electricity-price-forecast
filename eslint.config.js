@@ -3,19 +3,10 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    // TypeScript lives in `api/` and `web/` and nowhere else; the rest of the
-    // repository is Python, SQL, Markdown or scratch space.
-    ignores: [
-      "**/node_modules/**",
-      "**/dist/**",
-      ".scratch-*/**",
-      "analysis/**",
-      "data/**",
-      "db/**",
-      "docs/**",
-      "forecast/**",
-      "prototypes/**",
-    ],
+    // Only what is not source. Everything else is linted on purpose: TypeScript
+    // is supposed to live in `api/` and `web/`, and a file that turns up
+    // outside them should fail loudly rather than go unchecked.
+    ignores: ["**/node_modules/**", "**/dist/**", ".scratch-*/**"],
   },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,

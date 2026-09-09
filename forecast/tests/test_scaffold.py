@@ -1,4 +1,4 @@
-"""The suite is empty of behaviour on purpose - there is no behaviour yet.
+"""The suite is empty of behaviour on purpose — there is no behaviour yet.
 
 This one test exists so `pytest` exits 0 rather than exit code 5 ("no tests
 collected"), which the pull request gate of ADR-0010 would read as a failure.

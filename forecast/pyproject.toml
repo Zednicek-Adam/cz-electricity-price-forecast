@@ -22,6 +22,8 @@ packages = ["src/forecast"]
 testpaths = ["tests"]
 addopts = "-q"
 
+# Ruff governs this unit. `data/` and `analysis/` hold one-off scripts that
+# ran once and are kept for provenance, not code the gate has to defend.
 [tool.ruff]
 line-length = 88
 src = ["src", "tests"]

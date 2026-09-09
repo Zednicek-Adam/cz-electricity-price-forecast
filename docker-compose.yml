@@ -1,12 +1,19 @@
 # Local development needs Docker for exactly one thing: Postgres (ADR-0004).
 # `uv`, `pnpm`, `wrangler dev` and Vite all run natively.
 #
-# The `dbmate` service is here for a second reason. dbmate shells out to
-# `pg_dump` to regenerate `db/schema.sql`, and `pg_dump` refuses to dump a
-# server newer than itself - so running it in a container pins the dump to a
-# client that matches the server, on every machine and in CI alike. That is
-# what makes the pull request gate's "regenerated schema matches the committed
-# one" check (ADR-0010) a real check rather than a version-skew alarm.
+# The `dbmate` service narrows that, and it contradicts two ADRs to do it:
+# ADR-0004's "Docker for exactly one thing" and ADR-0005's "a single static
+# binary in CI". It is worth reopening because of how dbmate regenerates
+# `db/schema.sql` — it shells out to `pg_dump`, and `pg_dump` writes both its
+# own version and the server's into the dump. The pull request gate compares
+# the regenerated schema against the committed one byte for byte (ADR-0010), so
+# an unpinned client turns an unrelated Postgres release into a red build. A
+# container pins the client; nothing else does it the same way locally and in
+# CI.
+#
+# It is a one-shot `docker compose run --rm` rather than a service that stays
+# up, so what ADR-0004's rule is protecting — that nothing is *developed*
+# inside a container — holds. Only the letter of it moves.
 services:
   db:
     # Track whatever version the Neon project runs; CI uses this same image, so
