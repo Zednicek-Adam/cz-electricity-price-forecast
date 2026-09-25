@@ -1,0 +1,80 @@
+# The pull request gate (ADR-0010): three parallel jobs behind one required
+# aggregator. `all-green` is the only required check, so a merge is gated on one
+# status rather than on remembering which jobs matter.
+#
+# No `paths` or `paths-ignore` filter, anywhere. A filtered job that is also a
+# required check stays pending forever and blocks the merge, and every job here
+# takes seconds.
+name: gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: forecast
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          working-directory: forecast
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+
+  # The Postgres here is the `db` service of docker-compose.yml, not a copy of
+  # it: the images are pinned in that one file, so CI and a laptop cannot drift
+  # apart, and `dbmate` runs from its pinned container because the schema dump
+  # records both `pg_dump`'s version and the server's (ADR-0014). It is an
+  # ephemeral container on the runner and never Neon.
+  db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker compose up -d --wait db
+      - run: docker compose run --rm dbmate up
+      # A gate step, not a test: the committed schema is only true if the
+      # migrations regenerate it byte for byte.
+      - name: db/schema.sql matches what the migrations produce
+        run: git diff --exit-code db/schema.sql
+
+  all-green:
+    if: always()
+    needs: [python, typescript, db]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every gate job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do
+            [ "$r" = success ] || exit 1
+          done
