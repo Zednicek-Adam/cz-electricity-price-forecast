@@ -1,7 +1,7 @@
 """The Python unit: the dataset loader, the models and the runner.
 
-Empty at the scaffold stage. ADR-0013 phase 1 fills it in, in this order: the
-loader writing `observed_price` and `repaired_observed_price` in one
-transaction, ADR-0002's pure-function model seam, the day-lag naïve model,
-AR-168, then the published metrics and the Diebold-Mariano tests.
+`forecast.grid` is grid repair, `forecast.loader` takes the frozen dataset into
+the store. ADR-0013 phase 1 adds, in order: ADR-0002's pure-function model seam
+and the runner, the day-lag naïve model, AR-168, then the published metrics and
+the Diebold-Mariano tests.
 """
