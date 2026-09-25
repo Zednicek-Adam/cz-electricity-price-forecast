@@ -157,11 +157,19 @@ no path filtering, and `all-green` is the one required check behind them. The
 `db` job brings up the same `docker-compose.yml` services, so CI and a laptop
 share one pin for both images.
 
-A merge to `main` runs `.github/workflows/main.yml`. Its `migrate` job runs
-`dbmate up` against Neon as the owner role, from the `production` Environment.
-Migrations are expand-only, and `dbmate down` is never run against Neon. The
-badge at the top of this file is that workflow's status: if it is red, `main`
-is not what is running.
+A merge to `main` runs `.github/workflows/main.yml`: `migrate`, which runs
+`dbmate up` against Neon as the owner role, then `deploy`, which builds the
+client and runs `wrangler deploy`. Both run on every merge, with no path
+filtering. Migrations are expand-only, and `dbmate down` is never run against
+Neon. The badge at the top of this file is that workflow's status: if it is
+red, `main` is not what is running.
+
+Every pull request also gets a **preview**: the gate's `preview` job uploads a
+version of the Worker, not deployed, at a public
+`pr-<number>-cz-epf.<subdomain>.workers.dev` URL, and writes it to the job
+summary. It reads production Neon as the reader role, which cannot write. The
+preview is not a required check. Until Cloudflare is provisioned (#38) the job
+skips with a warning.
 
 Ruff's scope is the `forecast/` unit. `data/` and `analysis/` hold one-off
 scripts that ran once and are kept for their provenance, and they are outside
@@ -175,15 +183,21 @@ files the gate compares byte for byte.
 
 ### The API
 
-`api/` is a Hono app on a Cloudflare Worker (ADR-0004). It is read-only and
+`api/` is a Hono app on a Cloudflare Worker (ADR-0004). The same Worker serves
+the client, `web/`, built by Vite as static assets. The API is read-only and
 screen-shaped: an endpoint exists because a view needs it. It connects as
 whatever `NEON_READER` names, which in production is Neon's reader role. Locally
 that comes from `api/.dev.vars`, or on the command line:
 
 ```sh
+pnpm --filter @cz-epf/web build   # the Worker serves web/dist
 cd api
 pnpm exec wrangler dev --var NEON_READER:postgres://app_reader:app_reader@localhost:5432/czepf
 ```
+
+That serves the dashboard and the API together on `localhost:8787`. For work on
+the client, `pnpm --filter @cz-epf/web dev` runs Vite's dev server, which passes
+`/api` requests through to that Worker.
 
 | Endpoint | View |
 |---|---|

@@ -1,6 +1,5 @@
-# What a merge to `main` does (ADR-0010). Today that is `migrate` alone; phase 3
-# adds `deploy` behind it, so that a deploy never queries a column that does not
-# exist yet.
+# What a merge to `main` does (ADR-0010): `migrate`, then `deploy`, in that
+# order, so a deploy never queries a column that does not exist yet.
 #
 # No path filtering: "`main` is exactly what is deployed" holds without
 # qualification.
@@ -39,3 +38,26 @@ jobs:
         run: >
           docker compose run --rm --no-deps -e DATABASE_URL
           dbmate --wait --no-dump-schema up
+
+  # The built client and the API, one Worker (docs/research/
+  # cloudflare-static-assets.md). The Worker reads Neon through `NEON_READER`,
+  # a secret set on the Worker with `wrangler secret put`, never in GitHub.
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cz-epf/web build
+      - name: wrangler deploy
+        working-directory: api
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --message "main ${GITHUB_SHA::7}"
