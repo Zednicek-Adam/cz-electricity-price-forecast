@@ -1,0 +1,47 @@
+# Docker runs one service, Postgres (ADR-0004). `uv`, `pnpm`, `wrangler dev` and
+# Vite all run natively, and nothing is developed inside a container.
+#
+# The `dbmate` service is the one exception, and it is a one-shot
+# `docker compose run --rm` rather than a service that stays up. It is a
+# container so that `pg_dump` is pinned: `pg_dump` writes its own version and
+# the server's into `db/schema.sql`, which the pull request gate compares byte
+# for byte (ADR-0010). ADR-0014 has the reasoning and the options it beat.
+services:
+  db:
+    # Track whatever version the Neon project runs; CI uses this same image, so
+    # migrations and persistence tests have one code path. Pinned to the patch
+    # because `pg_dump` writes the server version into `db/schema.sql`, so a
+    # floating tag would make the gate's "the regenerated schema matches the
+    # committed one" check fail on an unrelated Postgres release. Bumping this
+    # is a commit that also regenerates the schema file.
+    image: postgres:17.11
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: czepf
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d czepf"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  dbmate:
+    image: ghcr.io/amacneil/dbmate:2.35.1
+    profiles:
+      - tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/czepf?sslmode=disable
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_SCHEMA_FILE: /db/schema.sql
+    volumes:
+      - ./db:/db
+
+volumes:
+  db-data:

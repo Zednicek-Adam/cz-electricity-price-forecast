@@ -4,6 +4,11 @@ status: accepted
 
 # Five tables on plain Postgres: one immutable record, everything else regenerable
 
+> **Partly amended by [ADR-0014](0014-dbmate-runs-in-a-container-so-pg-dump-is-pinned.md):**
+> `dbmate` is delivered as a pinned container image rather than a static
+> binary, locally and in CI alike. What `dbmate` *is* — plain SQL up/down
+> files, its own `schema_migrations` table — is unchanged.
+
 The store is **plain Postgres on Neon**. It holds five tables, split by a single
 rule: `observed_price` is the historical record and is permanent and immutable;
 everything else is **derived from it and regenerable**, deleted and rewritten by

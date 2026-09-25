@@ -4,6 +4,12 @@ status: accepted
 
 # v1 is built back to front, and the first chart is the last thing to appear
 
+> **Amended in place (issue #39):** the README obligations below are dated at
+> the **first preview deploy**, not at the first pull request that touches
+> `web/`. The phase-0 scaffold touched `web/` with nothing deployable behind it,
+> a case this ADR did not foresee; the preview deploy is the trigger its own
+> phase 3 already names, and it still falls in phase 3. Nothing else moves.
+
 Twelve ADRs settle what v1 is. None of them say what order it gets built in, or
 which human-only steps gate each part. This is the second half of the map's
 destination and the last decision on it.
@@ -85,9 +91,13 @@ request gets a preview URL that is publicly reachable regardless of repository
 visibility**, which is what makes issue #20's obligations due at the first preview
 deploy. So the root README — the attribution line, the no-endorsement disclaimer,
 the maintainer contact `data/NOTICE` already points at, and the written take-down
-commitment — **is a build step in this phase, due before the first pull request
-that touches `web/`**, not a launch-day task. It is not a wayfinder ticket: its
-content is already decided by issue #20, and the map ships no deliverables.
+commitment — **is a build step in this phase, due before the first preview
+deploy**, not a launch-day task. That date was first written as the first pull
+request touching `web/`, which is the same moment only while `web/` and the
+`deploy` job are built together; the phase-0 scaffold separated them, so the
+date is carried by the trigger this paragraph already names. It is not a
+wayfinder ticket: its content is already decided by issue #20, and the map
+ships no deliverables.
 
 This is also the phase that meets every integration risk at once, which is the
 order's weak point stated plainly: ADR-0010's own accepted gaps — Cloudflare Static
@@ -123,7 +133,7 @@ behind it.
 | **Cloudflare account** | any deploy | Phase 3 |
 | `CLOUDFLARE_API_TOKEN` (Workers Scripts:Edit) **and account id** → the same Environment | `deploy` and preview jobs | Phase 3 |
 | `wrangler secret put` the **reader URL** — never enters GitHub | the deployed Worker reaching Neon | Phase 3 |
-| Root **README** carrying issue #20's four obligations | the first preview deploy | Phase 3, before the first `web/` pull request |
+| Root **README** carrying issue #20's four obligations | the first preview deploy | Phase 3, before the `deploy` job ships a preview |
 | Persistent **dashboard footer** attribution | every view rendering the price series | Phase 3 |
 
 Three Neon roles, not ADR-0004's two — ADR-0010 already corrected that, and this
