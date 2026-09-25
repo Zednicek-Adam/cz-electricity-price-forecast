@@ -136,7 +136,8 @@ model comparison (ADR-0010):
 
 ```sh
 cd forecast
-DATABASE_URL=postgresql://app_writer:app_writer@localhost:5432/czepf   uv run python -m forecast.replay --models daylag,ar168 --start 2020-01-01 --end 2024-12-31
+DATABASE_URL=postgresql://app_writer:app_writer@localhost:5432/czepf \
+  uv run python -m forecast.replay --models daylag,ar168 --start 2020-01-01 --end 2024-12-31
 ```
 
 Against Neon it runs from the `replay` workflow, which is `workflow_dispatch`

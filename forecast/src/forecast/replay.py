@@ -36,7 +36,7 @@ from forecast.history import StoredHistory
 from forecast.loader import load_frozen_dataset
 from forecast.metrics import RebuildResult, rebuild_derived_rows
 from forecast.models import ROSTER, build
-from forecast.runner import RunType, current_code_version, run_forecast, write_run
+from forecast.runner import current_code_version, run_days
 
 log = logging.getLogger("forecast.replay")
 
@@ -62,10 +62,15 @@ def replay(
     start: date,
     end: date,
     *,
-    run_type: RunType = "backtest",
     code_version: str | None = None,
 ) -> ReplayResult:
-    """Load, forecast every model over `start`..`end` inclusive, rebuild."""
+    """Load, forecast every model over `start`..`end` inclusive, rebuild.
+
+    Every forecast it writes is a backtest: the replay only ever runs over
+    delivery days whose observed prices are already in the frozen dataset.
+    """
+    # Checked here as well as in `build`, so a typo fails before the load.
+
     unknown = sorted(set(models) - set(ROSTER))
     if unknown:
         raise ValueError(f"unknown model(s) {unknown}; the roster is {sorted(ROSTER)}")
@@ -82,14 +87,15 @@ def replay(
     runs = 0
     try:
         for slug in models:
-            model = build(slug)
             log.info("%s: %d delivery days from %s", slug, len(days), start)
-            for day in days:
-                run = run_forecast(model, day, history)
-                write_run(conn, run, run_type=run_type, code_version=code_version)
-                runs += 1
-                if day.day == 1 and day.month == 1:
-                    log.info("%s: reached %s", slug, day)
+            runs += run_days(
+                conn,
+                build(slug),
+                days,
+                history,
+                run_type="backtest",
+                code_version=code_version,
+            )
     finally:
         derived = rebuild_derived_rows(conn)
         log.info(

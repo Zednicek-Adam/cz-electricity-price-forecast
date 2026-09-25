@@ -41,10 +41,10 @@ def test_a_replay_loads_forecasts_and_rebuilds_everything(
     ]
     assert writer.execute("SELECT count(*) FROM observed_price").fetchone() == (61_368,)
     assert writer.execute(
-        "SELECT model, value FROM published_metric WHERE scope_type = 'overall'"
-        " AND scope_start = %s AND metric = 'rmae' ORDER BY model",
+        "SELECT value FROM published_metric WHERE model = 'daylag'"
+        " AND scope_type = 'overall' AND scope_start = %s AND metric = 'rmae'",
         (START,),
-    ).fetchall()[1] == ("daylag", 1)
+    ).fetchone() == (1,)
     pairs = writer.execute(
         "SELECT DISTINCT model_a, model_b FROM model_comparison ORDER BY 1, 2"
     ).fetchall()
@@ -73,7 +73,8 @@ def test_a_run_that_cannot_be_made_stops_the_replay_and_the_scoreboard_follows(
     db.execute("SET LOCAL ROLE app_writer")
 
     # AR-168 needs 730 days; the record opens 2018-01-01, so 2019-12-31 has one
-    # day too few and the replay stops there, before writing anything.
+    # day too few and the replay stops there, before writing any forecast. The
+    # rebuild still runs, and the stale row goes with it.
     with pytest.raises(HistoryGap):
         replay(db, ["ar168"], date(2019, 12, 31), END, code_version="abc")
 
