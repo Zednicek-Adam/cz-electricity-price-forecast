@@ -49,3 +49,4 @@ ALTER TABLE ONLY public.schema_migrations
 
 INSERT INTO public.schema_migrations (version) VALUES
     ('20260909000000');
+-- drift
