@@ -52,3 +52,75 @@ export interface BadRequestResponse {
   error: "bad_request";
   message: string;
 }
+
+/** The four published metrics, as stored and as the metric selector names them. */
+export type Metric = "mae" | "rmse" | "smape" | "rmae";
+
+/** One model's figures, aligned with a response's `deliveryDates`. */
+export interface MetricSeries {
+  model: ModelSlug;
+  /** `null` before the model's first scored day, or where the figure is undefined. */
+  values: (number | null)[];
+}
+
+/**
+ * `GET /api/running/:metric` — the Over time view: the running metric for
+ * every model across every delivery day of the record (ADR-0007). Derived in
+ * the Worker from the per-day published metrics (ADR-0015): a cumulative sum
+ * over a cumulative count of delivery periods, and for rMAE the ratio of two
+ * running MAEs, never a running mean of per-day ratios.
+ */
+export interface RunningMetricResponse {
+  metric: Metric;
+  deliveryDates: DeliveryDate[];
+  series: MetricSeries[];
+}
+
+/**
+ * `GET /api/daily/:metric` — the ribbon, and the worst / best / random day:
+ * the headline model's published metric on each delivery day, as stored. A
+ * different series from the running one.
+ */
+export interface DailyMetricResponse {
+  model: ModelSlug;
+  metric: Metric;
+  deliveryDates: DeliveryDate[];
+  values: number[];
+}
+
+/** One model's row of the accuracy table: the whole record, every metric. */
+export interface AccuracyRow {
+  model: ModelSlug;
+  mae: number | null;
+  rmse: number | null;
+  smape: number | null;
+  /** The day-lag naïve's own row reads exactly 1. */
+  rmae: number | null;
+}
+
+/** `GET /api/accuracy` — the accuracy table: every model × four metrics. */
+export interface AccuracyResponse {
+  rows: AccuracyRow[];
+}
+
+/** Diebold-Mariano tests of one model against one opponent. */
+export interface Opponent {
+  opponent: ModelSlug;
+  /**
+   * Indexed by period ordinal minus one. H1 is that the selected model is more
+   * accurate than the opponent, on absolute loss; `null` where the test could
+   * not be computed.
+   */
+  dmStatistic: (number | null)[];
+  pValue: (number | null)[];
+}
+
+/**
+ * `GET /api/comparisons/:model` — the Diebold-Mariano card: a model against
+ * each opponent, by period ordinal. The tests are on absolute loss, so they
+ * rank what MAE ranks, whatever metric the page shows (ADR-0005).
+ */
+export interface ComparisonResponse {
+  model: ModelSlug;
+  opponents: Opponent[];
+}
