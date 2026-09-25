@@ -224,6 +224,9 @@ ADR-0006.
 
     rMAE = MAE(model) / MAE(day-lag naïve)
 
+Both MAEs are taken over the same scope. Where the naïve's MAE over a scope is
+zero, or it has none, the ratio is undefined and no figure is published.
+
 The denominator is the **day-lag naïve** (ADR-0003), *not* the seasonal naïve the
 electricity-price-forecasting literature uses. The formula is the thesis's; the
 input is not, which is why these figures are not comparable to published EPF work
