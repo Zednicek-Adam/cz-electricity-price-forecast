@@ -1,0 +1,58 @@
+# The replay (ADR-0010): load the frozen dataset, forecast a model set over a
+# date range, rebuild every published metric and model comparison. It writes to
+# production Neon, so it runs only when a person asks it to: `workflow_dispatch`
+# and nothing else. No schedule, and never on a merge.
+#
+# Chronos-2 is not on the roster yet (ADR-0013 phase 4).
+name: replay
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: Comma-separated model slugs
+        required: true
+        default: daylag,ar168
+      start:
+        description: First delivery day (YYYY-MM-DD)
+        required: true
+        default: "2020-01-01"
+      end:
+        description: Last delivery day (YYYY-MM-DD)
+        required: true
+        default: "2024-12-31"
+
+permissions:
+  contents: read
+
+# One replay at a time: two would interleave their rebuilds.
+concurrency:
+  group: replay
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: forecast
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: forecast
+          enable-cache: true
+      - run: uv sync --locked --no-dev
+      # As the Neon writer: it can append to the record and replace derived
+      # rows, and nothing more (the grant migration).
+      - name: Replay ${{ inputs.models }} over ${{ inputs.start }} to ${{ inputs.end }}
+        env:
+          DATABASE_URL: ${{ secrets.NEON_WRITER }}
+          MODELS: ${{ inputs.models }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: >
+          uv run --no-dev python -m forecast.replay
+          --models "$MODELS" --start "$START" --end "$END"

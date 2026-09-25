@@ -128,6 +128,22 @@ Python, `eslint` and `prettier` for TypeScript. `pnpm format` writes the fixes;
 hand-wrapped, so `.prettierignore` excludes `*.md` along with the generated
 files the gate compares byte for byte.
 
+### The replay
+
+The replay fills the store. It loads the frozen dataset, forecasts a set of
+models over a range of delivery days, and rebuilds every published metric and
+model comparison (ADR-0010):
+
+```sh
+cd forecast
+DATABASE_URL=postgresql://app_writer:app_writer@localhost:5432/czepf   uv run python -m forecast.replay --models daylag,ar168 --start 2020-01-01 --end 2024-12-31
+```
+
+Against Neon it runs from the `replay` workflow, which is `workflow_dispatch`
+only, as the writer role. Nothing runs it on a merge or on a schedule. The
+tests expect an empty local database, so replay into a separate one, or
+truncate afterwards.
+
 ### Stopping
 
 ```sh
