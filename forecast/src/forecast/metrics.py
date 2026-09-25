@@ -23,8 +23,10 @@ rows are pairwise, so no per-model update is even well defined.
 
 import itertools
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -35,14 +37,41 @@ from forecast.models.daylag import DayLagNaive
 
 NAIVE = DayLagNaive.slug
 
-# scope_type -> how a delivery date maps to the first delivery day of its scope.
-# `overall` starts at the first scored day of each model and run type.
+# A delivery period on the repaired grid, as the scored frame keys it.
+PERIOD = ["delivery_date", "period_ordinal", "resolution_minutes"]
+
+# scope_type -> the first delivery day of the scope each scored period is in.
+# `overall` starts at the first replayed day of the run type, the same date for
+# every model, so a reader finds every model's whole-record row by one key
+# (ADR-0005: 2020-01-01 for the backtest).
 SCOPES = {
-    "delivery_day": lambda days: days,
-    "month": lambda days: days.dt.to_period("M").dt.start_time,
-    "year": lambda days: days.dt.to_period("Y").dt.start_time,
-    "overall": None,
+    "delivery_day": lambda scored: scored["delivery_date"],
+    "month": lambda scored: scored["delivery_date"].dt.to_period("M").dt.start_time,
+    "year": lambda scored: scored["delivery_date"].dt.to_period("Y").dt.start_time,
+    "overall": lambda scored: scored.groupby("run_type")["delivery_date"].transform(
+        "min"
+    ),
 }
+
+
+class MetricRow(NamedTuple):
+    model: str
+    run_type: str
+    scope_type: str
+    scope_start: date
+    metric: str
+    value: float
+    n_forecasts: int
+
+
+class ComparisonRow(NamedTuple):
+    model_a: str
+    model_b: str
+    run_type: str
+    period_ordinal: int
+    resolution_minutes: int
+    dm_statistic: float
+    p_value: float
 
 
 @dataclass(frozen=True)
@@ -56,23 +85,26 @@ def rebuild_derived_rows(conn: psycopg.Connection) -> RebuildResult:
     computed_at = datetime.now(UTC)
     with conn.transaction():
         scored = _scored_forecasts(conn)
-        metric_rows = published_metrics(scored)
-        comparison_rows = model_comparisons(scored)
+        metric_rows = _published_metrics(scored)
+        comparison_rows = _model_comparisons(scored)
         conn.execute("DELETE FROM published_metric")
         conn.execute("DELETE FROM model_comparison")
-        with conn.cursor().copy(
-            "COPY published_metric (model, run_type, scope_type, scope_start,"
-            " metric, value, n_forecasts, computed_at) FROM STDIN"
-        ) as copy:
-            for row in metric_rows:
-                copy.write_row((*row, computed_at))
-        with conn.cursor().copy(
-            "COPY model_comparison (model_a, model_b, run_type, period_ordinal,"
-            " resolution_minutes, dm_statistic, p_value, computed_at) FROM STDIN"
-        ) as copy:
-            for row in comparison_rows:
-                copy.write_row((*row, computed_at))
+        _copy(conn, "published_metric", MetricRow, metric_rows, computed_at)
+        _copy(conn, "model_comparison", ComparisonRow, comparison_rows, computed_at)
     return RebuildResult(len(metric_rows), len(comparison_rows))
+
+
+def _copy(
+    conn: psycopg.Connection,
+    table: str,
+    shape: type[NamedTuple],
+    rows: Iterable[tuple],
+    computed_at: datetime,
+) -> None:
+    columns = ", ".join([*shape._fields, "computed_at"])
+    with conn.cursor().copy(f"COPY {table} ({columns}) FROM STDIN") as copy:
+        for row in rows:
+            copy.write_row((*row, computed_at))
 
 
 def _scored_forecasts(conn: psycopg.Connection) -> pd.DataFrame:
@@ -84,16 +116,7 @@ def _scored_forecasts(conn: psycopg.Connection) -> pd.DataFrame:
         " USING (delivery_date, period_ordinal, resolution_minutes)"
     ).fetchall()
     scored = pd.DataFrame(
-        rows,
-        columns=[
-            "model",
-            "run_type",
-            "delivery_date",
-            "period_ordinal",
-            "resolution_minutes",
-            "observed",
-            "forecast",
-        ],
+        rows, columns=["model", "run_type", *PERIOD, "observed", "forecast"]
     )
     scored["delivery_date"] = pd.to_datetime(scored["delivery_date"])
     scored["observed"] = scored["observed"].astype("float64")
@@ -102,8 +125,14 @@ def _scored_forecasts(conn: psycopg.Connection) -> pd.DataFrame:
     return scored
 
 
-def published_metrics(scored: pd.DataFrame) -> list[tuple]:
-    """(model, run_type, scope_type, scope_start, metric, value, n_forecasts)."""
+def _published_metrics(scored: pd.DataFrame) -> list[MetricRow]:
+    """All four metrics at all four scopes, per model and run type.
+
+    rMAE is `MAE(model) / MAE(day-lag naïve)` over the same scope, each MAE over
+    its own scored periods, exactly as CONTEXT.md defines it. Where the naïve
+    has no MAE in a scope, or an MAE of zero, the ratio is undefined and no
+    figure is published.
+    """
     if scored.empty:
         return []
     frame = scored.assign(
@@ -111,55 +140,26 @@ def published_metrics(scored: pd.DataFrame) -> list[tuple]:
         squared_error=scored["error"] ** 2,
         smape_ratio=_smape_ratio(scored["observed"], scored["forecast"]),
     )
-    naive = frame.loc[
-        frame["model"] == NAIVE,
-        ["run_type", "delivery_date", "period_ordinal", "resolution_minutes"],
-    ].assign(naive_abs_error=frame.loc[frame["model"] == NAIVE, "abs_error"])
-    frame = frame.merge(
-        naive,
-        on=["run_type", "delivery_date", "period_ordinal", "resolution_minutes"],
-        how="left",
-    )
-
-    rows: list[tuple] = []
-    for scope_type, to_start in SCOPES.items():
-        if to_start is None:
-            first = frame.groupby(["model", "run_type"])["delivery_date"].transform(
-                "min"
-            )
-            frame["scope_start"] = first
-        else:
-            frame["scope_start"] = to_start(frame["delivery_date"])
-        keys = ["model", "run_type", "scope_start"]
-        grouped = frame.groupby(keys).agg(
+    rows: list[MetricRow] = []
+    for scope_type, scope_start in SCOPES.items():
+        frame["scope_start"] = scope_start(frame)
+        sums = frame.groupby(["model", "run_type", "scope_start"]).agg(
             n=("abs_error", "size"),
             abs_sum=("abs_error", "sum"),
             squared_sum=("squared_error", "sum"),
             smape_sum=("smape_ratio", "sum"),
         )
-        benchmarked = (
-            frame.dropna(subset=["naive_abs_error"])
-            .groupby(keys)
-            .agg(
-                n=("abs_error", "size"),
-                abs_sum=("abs_error", "sum"),
-                naive_abs_sum=("naive_abs_error", "sum"),
-            )
-        )
-        for (model, run_type, start), g in grouped.iterrows():
-            scope = (model, run_type, scope_type, start.date())
-            n = int(g["n"])
-            rows.append((*scope, "mae", g["abs_sum"] / n, n))
-            rows.append((*scope, "rmse", math.sqrt(g["squared_sum"] / n), n))
-            rows.append((*scope, "smape", 200 * g["smape_sum"] / n, n))
-        for (model, run_type, start), g in benchmarked.iterrows():
-            # MAE over the periods both were scored on, so the ratio compares
-            # like with like. A naïve that was exactly right on every period
-            # leaves the ratio undefined, and an undefined figure is not stored.
-            if g["naive_abs_sum"] > 0:
-                scope = (model, run_type, scope_type, start.date())
-                value = g["abs_sum"] / g["naive_abs_sum"]
-                rows.append((*scope, "rmae", value, int(g["n"])))
+        mae = sums["abs_sum"] / sums["n"]
+        for (model, run_type, start), scope in sums.iterrows():
+            n = int(scope["n"])
+            key = (model, run_type, scope_type, start.date())
+            rows.append(MetricRow(*key, "mae", mae[model, run_type, start], n))
+            rows.append(MetricRow(*key, "rmse", math.sqrt(scope["squared_sum"] / n), n))
+            rows.append(MetricRow(*key, "smape", 200 * scope["smape_sum"] / n, n))
+            naive_mae = mae.get((NAIVE, run_type, start), 0.0)
+            if naive_mae > 0:
+                ratio = mae[model, run_type, start] / naive_mae
+                rows.append(MetricRow(*key, "rmae", ratio, n))
     return rows
 
 
@@ -170,20 +170,18 @@ def _smape_ratio(observed: pd.Series, forecast: pd.Series) -> pd.Series:
     return ratio.fillna(0.0)
 
 
-def model_comparisons(scored: pd.DataFrame) -> list[tuple]:
+def _model_comparisons(scored: pd.DataFrame) -> list[ComparisonRow]:
     """Diebold-Mariano tests for every ordered model pair, per period ordinal.
 
-    (model_a, model_b, run_type, period_ordinal, resolution_minutes,
-    dm_statistic, p_value). H1 is that `model_a` is more accurate than
+    H1 is that `model_a` is more accurate than
     `model_b`, on absolute loss, so a small p-value means `model_a` wins. A test
     that fails to compute writes no row.
     """
-    rows: list[tuple] = []
-    keys = ["delivery_date", "period_ordinal", "resolution_minutes"]
-    for run_type, of_run_type in scored.groupby("run_type"):
+    rows: list[ComparisonRow] = []
+    for run_type, run_type_scored in scored.groupby("run_type"):
         by_model = {
-            model: frame.set_index(keys)["error"]
-            for model, frame in of_run_type.groupby("model")
+            model: frame.set_index(PERIOD)["error"]
+            for model, frame in run_type_scored.groupby("model")
         }
         for model_a, model_b in itertools.permutations(sorted(by_model), 2):
             pair = pd.concat(
@@ -199,7 +197,7 @@ def model_comparisons(scored: pd.DataFrame) -> list[tuple]:
                 if result is not None:
                     statistic, p_value = result
                     rows.append(
-                        (
+                        ComparisonRow(
                             model_a,
                             model_b,
                             run_type,

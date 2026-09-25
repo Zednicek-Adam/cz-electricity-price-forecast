@@ -130,6 +130,24 @@ def test_all_four_scopes_are_written_for_every_model(
     assert rows == expected
 
 
+def test_the_overall_scope_starts_on_the_first_replayed_day_for_every_model(
+    db: psycopg.Connection,
+) -> None:
+    seed_observed(db, DAY_1, [10.0] * 24)
+    seed_observed(db, DAY_2, [20.0] * 24)
+    seed_forecast(db, "daylag", DAY_1, [6.0] * 24)
+    seed_forecast(db, "daylag", DAY_2, [28.0] * 24)
+    seed_forecast(db, "ar168", DAY_2, [17.0] * 24)  # joins a day late
+    rebuild(db)
+
+    starts = db.execute(
+        "SELECT DISTINCT scope_start FROM published_metric WHERE scope_type = 'overall'"
+    ).fetchall()
+    assert starts == [(DAY_1,)]
+    # Its rMAE is still MAE over MAE on the whole scope: 3 / mean(4, 8).
+    assert metric(db, "ar168", "rmae", "overall") == pytest.approx((3 / 6, 24))
+
+
 def test_the_naive_rmae_is_exactly_one_everywhere(
     two_days: psycopg.Connection,
 ) -> None:
@@ -277,7 +295,6 @@ def test_the_dm_pair_is_antisymmetric_with_complementary_p_values(
     for ordinal, (statistic, p_value) in forward.items():
         assert backward[ordinal][0] == pytest.approx(-statistic)
         assert backward[ordinal][1] == pytest.approx(1 - p_value)
-        assert backward[ordinal][1] != pytest.approx(-p_value)
 
 
 def test_a_small_p_value_means_model_a_is_more_accurate(
