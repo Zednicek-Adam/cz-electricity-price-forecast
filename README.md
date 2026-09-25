@@ -3,17 +3,62 @@
 [![main](https://github.com/Zednicek-Adam/cz-electricity-price-forecast/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/Zednicek-Adam/cz-electricity-price-forecast/actions/workflows/main.yml)
 
 A public dashboard that forecasts day-ahead electricity prices for the Czech
-bidding zone (`BZN|CZ`) and scores its own forecasts against the market outcome
-once it is known.
+bidding zone (`BZN|CZ`) and scores its own forecasts against the market outcome.
 
-`CONTEXT.md` fixes the vocabulary; `docs/adr/` holds the decisions; ADR-0013 is
-the build order. This README carries only what a developer needs to run the
-repository locally. The project's narrative, its accuracy disclosures and
-issue #20's attribution obligations land here in phase 3 (issue #51).
+**This is a backtest.** Every forecast on the dashboard was produced after the
+fact, over delivery days from 2020-01-01 to 2024-12-31 whose prices were
+already known, by models that could see only the prices published before each
+day they forecast. Nothing on the dashboard forecasts tomorrow.
 
-ADR-0013 dates those obligations at the first preview deploy, which phase 3
-builds. Until then `data/NOTICE` carries the attribution, the no-endorsement
-line and the take-down commitment beside the data they cover.
+**rMAE here is not comparable to published electricity-price-forecasting work
+or to the figures in the thesis this project builds on**, because it is
+measured against a day-lag naïve (the same hour on the previous day) rather
+than the literature's seasonal naïve.
+
+Prices are in EUR/MWh throughout, because that is how the market publishes
+them. What every figure means, and how it is computed, is in
+[Reading the figures](docs/reading-the-figures.md).
+
+## Data, attribution and take-down
+
+Electricity price data sourced from the
+[ENTSO-E Transparency Platform](https://transparency.entsoe.eu/). ENTSO-E does
+not endorse this project and is not responsible for its content or for any
+forecasts derived from the data.
+
+ENTSO-E performs no control on the accuracy, currency or consistency of the
+data published on the Transparency Platform, and this project uses it under its
+own responsibility (Transparency Platform General Terms and Conditions,
+clause 6). The series is the day-ahead price for `BZN|CZ` (Transparency
+Regulation article 12.1.d), delivery days 2018-01-01 to 2024-12-31, committed
+in `data/` with its provenance in `data/NOTICE` and `data/README.md`. No price
+value was altered.
+
+**Take-down.** On a request from ENTSO-E or from the Primary Owner of Data, the
+observed price series will be withdrawn from public display promptly and
+without argument. The dashboard would then keep its forecasts and accuracy
+figures, which are this project's own output, and stop showing the prices they
+were scored against.
+
+**Maintainer contact:** [Adam Zedníček on GitHub](https://github.com/Zednicek-Adam),
+or an issue on this repository.
+
+## Models
+
+Three models, all univariate, on the roster in `CONTEXT.md` (ADR-0003):
+
+- **Chronos-2** (`chronos2`), Amazon's pretrained forecasting model, used
+  zero-shot. It is the headline model, chosen before any result was read. It
+  joins in phase 4.
+- **AR-168** (`ar168`), an autoregression on a week of hourly lags of the
+  differenced price. A hand-written port of `ar_lm_predict` from the author's
+  diploma thesis repository,
+  [`epf-diploma`](https://github.com/Zednicek-Adam/epf-diploma)
+  (`models/_utils.R`, run by `models/R/AR168.R`; private). No history was
+  transplanted from it, and the bar for the port is its specification, not the
+  thesis's output.
+- **The day-lag naïve** (`daylag`): yesterday's price for the same hour. It is
+  what rMAE divides by, which is why its own rMAE is exactly 1.
 
 ## The four units
 
@@ -194,17 +239,3 @@ truncate afterwards.
 docker compose down     # keep the data
 docker compose down -v  # and drop it
 ```
-
-## Models
-
-Three models, all univariate, on the roster in `CONTEXT.md` (ADR-0003). The
-day-lag naïve (`daylag`) is what rMAE divides by. AR-168 (`ar168`) is a hand-written
-port of `ar_lm_predict` from the author's diploma thesis repository,
-`epf-diploma` (`models/_utils.R`, run by `models/R/AR168.R`). No history was
-transplanted from it, and the bar for the port is its specification, not the
-thesis's output. Chronos-2 joins in phase 4.
-
-## Data
-
-`data/` holds the frozen observed-price dataset the whole of v1 replays over,
-with its provenance and licence in `data/NOTICE`. See `data/README.md`.
