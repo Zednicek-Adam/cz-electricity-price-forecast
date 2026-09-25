@@ -142,10 +142,11 @@ pnpm exec wrangler dev --var NEON_READER:postgres://app_reader:app_reader@localh
 
 | Endpoint | View |
 |---|---|
-| `GET /api/days/:date` | Day view: the repaired observed price and every model over 24 period ordinals |
+| `GET /api/days/:deliveryDate` | Day view: the repaired observed price and every model over 24 period ordinals |
 
-Its tests invoke the app's fetch handler directly against a seeded Postgres, as
-`app_reader`. The row types in `api/src/db.generated.ts` are generated from the
+Its tests invoke the app's fetch handler directly, as `app_reader`, against a
+seeded Postgres: a database of their own, `czepf_api_test`. It is cloned from the
+migrated local one and dropped afterwards, so running them leaves your data alone. The row types in `api/src/db.generated.ts` are generated from the
 migrated database by `pnpm --filter @cz-epf/api db:types`. Regenerate them
 alongside any migration; the pull request gate fails if they drift.
 

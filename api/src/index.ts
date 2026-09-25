@@ -22,7 +22,7 @@ export interface ModelForecast {
 }
 
 /**
- * `GET /api/days/:date` — the Day view: the repaired observed price and every
+ * `GET /api/days/:deliveryDate` — the Day view: the repaired observed price and every
  * model's forecasts over the 24 period ordinals of one delivery day. A
  * daylight-saving day is on the repaired grid like any other (ADR-0006).
  */
@@ -33,18 +33,18 @@ export interface DeliveryDayResponse {
   forecasts: ModelForecast[];
 }
 
-/** The first and last replayed delivery days. */
-export interface ReplayedRecord {
+/** The first and last delivery days the backtest covers. */
+export interface RecordExtent {
   first: DeliveryDate;
   last: DeliveryDate;
 }
 
-/** 404: the day is not one the record holds. */
+/** 404: the delivery day is not one the record holds. */
 export interface NotInRecordResponse {
   error: "not_in_record";
   deliveryDate: DeliveryDate;
-  /** The replayed record's extent, or null while the store holds no forecasts. */
-  record: ReplayedRecord | null;
+  /** The record's extent, or null while the store holds no forecasts. */
+  record: RecordExtent | null;
 }
 
 /** 400: the request itself is malformed. */

@@ -12,10 +12,5 @@ import type { DeliveryDayResponse, ModelSlug } from "@cz-epf/api";
 /** The dashboard leads with univariate Chronos-2 (ADR-0003). */
 export const headlineModel: ModelSlug = "chronos2";
 
-/** The Day view's request, typed by the API's own contract. */
-export async function fetchDeliveryDay(
-  date: string,
-): Promise<DeliveryDayResponse> {
-  const response = await fetch(`/api/days/${date}`);
-  return (await response.json()) as DeliveryDayResponse;
-}
+/** The Day view's payload, typed by the API's own contract. */
+export type DayViewPayload = DeliveryDayResponse;
