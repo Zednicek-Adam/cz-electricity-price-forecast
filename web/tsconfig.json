@@ -1,5 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // A browser client.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
   "include": ["src"],
   "exclude": ["node_modules"]
 }

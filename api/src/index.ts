@@ -1,19 +1,54 @@
 /**
- * The Python/TypeScript seam is the schema, and the API/client seam is this
- * file: `web/` imports from `@cz-epf/api` rather than restating what the API
- * returns, so there is nothing to generate and nothing to keep in step by hand
- * (ADR-0004).
+ * The API/client contract. `web/` imports these types from `@cz-epf/api`
+ * rather than restating what the API returns, so there is nothing to generate
+ * and nothing to keep in step by hand (ADR-0004). This module holds types only,
+ * so importing it pulls no server code into the client.
  *
- * There is no Hono app yet. ADR-0013 puts the API in phase 2, after the store
- * and the runner, and ADR-0007's views are what specify its endpoints — so an
- * endpoint, and the response shape that goes with it, arrives when a view
- * needs it.
- *
- * One type is here now, and only because `CONTEXT.md` is already its authority
- * rather than the schema: ADR-0005 leaves `model` free text in the database
- * precisely so that the roster lives in one written place. Nothing else is
- * restated here ahead of the migration that constrains it.
+ * Every price is EUR/MWh, as the market publishes it, at every layer: nothing
+ * here or behind it converts a currency (ADR-0008).
  */
 
 /** The three models of ADR-0003, as they are written on a stored row. */
 export type ModelSlug = "chronos2" | "ar168" | "daylag";
+
+/** A delivery day, `YYYY-MM-DD`: a calendar day in `Europe/Prague`. */
+export type DeliveryDate = string;
+
+/** One model's 24 forecasts for a delivery day, EUR/MWh. */
+export interface ModelForecast {
+  model: ModelSlug;
+  /** Indexed by period ordinal minus one, on the repaired 24-period grid. */
+  prices: number[];
+}
+
+/**
+ * `GET /api/days/:date` — the Day view: the repaired observed price and every
+ * model's forecasts over the 24 period ordinals of one delivery day. A
+ * daylight-saving day is on the repaired grid like any other (ADR-0006).
+ */
+export interface DeliveryDayResponse {
+  deliveryDate: DeliveryDate;
+  /** Repaired observed prices, EUR/MWh, indexed by period ordinal minus one. */
+  observed: number[];
+  forecasts: ModelForecast[];
+}
+
+/** The first and last replayed delivery days. */
+export interface ReplayedRecord {
+  first: DeliveryDate;
+  last: DeliveryDate;
+}
+
+/** 404: the day is not one the record holds. */
+export interface NotInRecordResponse {
+  error: "not_in_record";
+  deliveryDate: DeliveryDate;
+  /** The replayed record's extent, or null while the store holds no forecasts. */
+  record: ReplayedRecord | null;
+}
+
+/** 400: the request itself is malformed. */
+export interface BadRequestResponse {
+  error: "bad_request";
+  message: string;
+}

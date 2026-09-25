@@ -1,5 +1,11 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["src"],
+  "compilerOptions": {
+    // Standard fetch types (Request, Response, URL): the app uses nothing
+    // Worker-specific. Node's types are for the tests and the scripts.
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src", "test", "scripts", "vitest.config.ts"],
   "exclude": ["node_modules"]
 }

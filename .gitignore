@@ -12,3 +12,6 @@ analysis/raw/
 # TypeScript, under pnpm
 node_modules/
 dist/
+
+# Wrangler's local build and state.
+.wrangler/

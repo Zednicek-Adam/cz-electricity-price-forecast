@@ -128,6 +128,27 @@ Python, `eslint` and `prettier` for TypeScript. `pnpm format` writes the fixes;
 hand-wrapped, so `.prettierignore` excludes `*.md` along with the generated
 files the gate compares byte for byte.
 
+### The API
+
+`api/` is a Hono app on a Cloudflare Worker (ADR-0004). It is read-only and
+screen-shaped: an endpoint exists because a view needs it. It connects as
+whatever `NEON_READER` names, which in production is Neon's reader role. Locally
+that comes from `api/.dev.vars`, or on the command line:
+
+```sh
+cd api
+pnpm exec wrangler dev --var NEON_READER:postgres://app_reader:app_reader@localhost:5432/czepf
+```
+
+| Endpoint | View |
+|---|---|
+| `GET /api/days/:date` | Day view: the repaired observed price and every model over 24 period ordinals |
+
+Its tests invoke the app's fetch handler directly against a seeded Postgres, as
+`app_reader`. The row types in `api/src/db.generated.ts` are generated from the
+migrated database by `pnpm --filter @cz-epf/api db:types`. Regenerate them
+alongside any migration; the pull request gate fails if they drift.
+
 ### The replay
 
 The replay fills the store. It loads the frozen dataset, forecasts a set of

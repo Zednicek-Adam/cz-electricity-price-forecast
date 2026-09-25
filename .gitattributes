@@ -6,3 +6,6 @@
 # The pull request gate compares the regenerated file against this one byte for
 # byte (ADR-0010), so it must not be checked out with CRLF on Windows.
 db/schema.sql text eol=lf
+
+# Generated from the migrated database and compared byte for byte the same way.
+api/src/db.generated.ts text eol=lf
