@@ -24,7 +24,6 @@ name = "forecast"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "numpy" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
 ]
@@ -37,7 +36,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=2.5.3" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },
 ]

@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Loader, models and runner for the CZ day-ahead price forecast"
 requires-python = ">=3.13"
 dependencies = [
-    "numpy>=2.5.3",
     "pandas>=3.0.6",
     "psycopg[binary]>=3.2",
 ]

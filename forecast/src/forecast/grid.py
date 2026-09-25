@@ -29,6 +29,7 @@ from zoneinfo import ZoneInfo
 PRAGUE = ZoneInfo("Europe/Prague")
 HOUR = timedelta(hours=1)
 REPAIRED_PERIODS_PER_DAY = 24
+RESOLUTION_MINUTES = 60  # v1's only resolution: the record ends before 2025-10-01
 
 
 class IncompleteDeliveryDay(ValueError):
@@ -62,6 +63,16 @@ def true_periods(day: date) -> list[datetime]:
     return [start + i * HOUR for i in range(count)]
 
 
+def market_label(day: date, period_ordinal: int) -> datetime:
+    """A period's label on the repaired grid: its delivery day plus its period
+    ordinal minus one hour, as a naive wall-clock value.
+
+    A label is a coordinate, never an instant: on a spring-forward day the label
+    02:00 names a period that exists only after grid repair (ADR-0002).
+    """
+    return datetime(day.year, day.month, day.day) + (period_ordinal - 1) * HOUR
+
+
 def repair_day(day: date, prices: Mapping[datetime, Decimal]) -> list[RepairedPrice]:
     """One delivery day on the regular 24-period grid.
 
@@ -77,7 +88,7 @@ def repair_day(day: date, prices: Mapping[datetime, Decimal]) -> list[RepairedPr
         )
     repaired = []
     for ordinal in range(1, REPAIRED_PERIODS_PER_DAY + 1):
-        label = datetime(day.year, day.month, day.day, ordinal - 1)
+        label = market_label(day, ordinal)
         # For a label that occurs twice, fold=0 is the first (CEST) instant and
         # fold=1 the second (CET). For a label that does not occur at all,
         # fold=0 resolves forwards and fold=1 backwards, onto the two periods

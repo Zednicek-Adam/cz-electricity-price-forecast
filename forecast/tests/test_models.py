@@ -11,9 +11,9 @@ from functools import cache
 import pandas as pd
 import pytest
 
-from forecast.grid import repair_grid
-from forecast.history import label
+from forecast.grid import market_label, repair_grid
 from forecast.loader import read_frozen_dataset
+from forecast.model import history_series
 from forecast.models import ROSTER, build
 from forecast.models.daylag import DayLagNaive
 from forecast.runner import run_forecast
@@ -24,12 +24,9 @@ def frozen_history() -> pd.Series:
     """The frozen dataset, grid-repaired in memory, as the runner would hand it."""
     prices = {p.delivery_start: p.price for p in read_frozen_dataset()}
     repaired = repair_grid(prices)
-    return pd.Series(
+    return history_series(
+        [market_label(r.delivery_date, r.period_ordinal) for r in repaired],
         [float(r.price) for r in repaired],
-        index=pd.DatetimeIndex(
-            [label(r.delivery_date, r.period_ordinal) for r in repaired]
-        ),
-        name="price",
     )
 
 

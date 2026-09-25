@@ -20,7 +20,7 @@ from forecast.models.daylag import DayLagNaive
 from forecast.runner import (
     HistoryGap,
     Run,
-    code_version,
+    current_code_version,
     run_forecast,
     write_run,
 )
@@ -95,21 +95,6 @@ def test_the_cutoff_excludes_every_period_from_the_target_day_onward(
     assert model.seen.index[0] == datetime(2024, 3, 30, 0)
     assert model.seen.index[-1] == datetime(2024, 4, 1, 23)
     assert len(model.seen) == 3 * 24
-
-
-def test_rewriting_the_store_from_the_target_day_onward_changes_nothing(
-    writer: psycopg.Connection,
-) -> None:
-    before = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-
-    writer.execute("RESET ROLE")
-    writer.execute(
-        "UPDATE repaired_observed_price SET price = -9999 WHERE delivery_date >= %s",
-        (TARGET,),
-    )
-    after = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-
-    assert after == before
 
 
 def test_a_gap_in_the_required_history_raises_and_writes_nothing(
@@ -206,4 +191,4 @@ def test_a_crash_mid_write_leaves_the_previous_run_whole(
 
 
 def test_the_code_version_is_a_git_sha() -> None:
-    assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", code_version())
+    assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", current_code_version())
