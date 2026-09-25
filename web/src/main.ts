@@ -7,10 +7,23 @@
  * shapes cross the workspace boundary by import, with nothing generated.
  */
 
-import type { DeliveryDayResponse, ModelSlug } from "@cz-epf/api";
+import type {
+  AccuracyResponse,
+  ComparisonResponse,
+  DailyMetricResponse,
+  DeliveryDayResponse,
+  ModelSlug,
+  RunningMetricResponse,
+} from "@cz-epf/api";
 
 /** The dashboard leads with univariate Chronos-2 (ADR-0003). */
 export const headlineModel: ModelSlug = "chronos2";
 
-/** The Day view's payload, typed by the API's own contract. */
-export type DayViewPayload = DeliveryDayResponse;
+/** What each view receives, typed by the API's own contract. */
+export interface ViewPayloads {
+  day: DeliveryDayResponse;
+  overTime: RunningMetricResponse;
+  ribbon: DailyMetricResponse;
+  accuracyTable: AccuracyResponse;
+  dieboldMariano: ComparisonResponse;
+}

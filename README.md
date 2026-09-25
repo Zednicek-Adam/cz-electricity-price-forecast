@@ -143,6 +143,12 @@ pnpm exec wrangler dev --var NEON_READER:postgres://app_reader:app_reader@localh
 | Endpoint | View |
 |---|---|
 | `GET /api/days/:deliveryDate` | Day view: the repaired observed price and every model over 24 period ordinals |
+| `GET /api/running/:metric` | Over time view: every model's running metric across the record, derived in the Worker (ADR-0015) |
+| `GET /api/daily/:metric` | The ribbon, and worst / best / random: the headline model's per-day metric |
+| `GET /api/accuracy` | Accuracy table: every model × four metrics over the whole record |
+| `GET /api/comparisons/:model` | Diebold–Mariano card: a model against both opponents, by period ordinal |
+
+`:metric` is one of `mae`, `rmse`, `smape` and `rmae`.
 
 Its tests invoke the app's fetch handler directly, as `app_reader`, against a
 seeded Postgres: a database of their own, `czepf_api_test`. It is cloned from the

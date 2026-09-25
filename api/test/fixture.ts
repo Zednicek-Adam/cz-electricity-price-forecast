@@ -14,6 +14,7 @@
 import postgres from "postgres";
 
 import { LOCAL_DATABASE_URL } from "../src/db.ts";
+import { seedMetrics } from "./metrics-fixture.ts";
 
 const SOURCE_URL = process.env["DATABASE_URL"] ?? LOCAL_DATABASE_URL;
 const TEST_DATABASE = "czepf_api_test";
@@ -123,6 +124,7 @@ export async function setup(): Promise<void> {
   });
   await seedDay(BROKEN.offRoster, full, { daylag: full, lear: full });
   await seedDay(BROKEN.noObserved, [], { daylag: full });
+  await seedMetrics(sql);
   await sql.end();
 }
 
