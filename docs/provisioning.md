@@ -315,9 +315,11 @@ returns a database error.
 Two ordering facts. `wrangler secret put` **creates a new version of the Worker
 and deploys it immediately**, so the Worker must already exist — run this after
 the first `wrangler deploy`, not before. And secrets are scoped to a Worker *and
-environment*, so if #53's preview deploys use a Wrangler environment rather than
-versions, the secret has to be set for that environment too. #53 settles which;
-this file should say which once it has.
+environment*. #53 settled on **versions**, not Wrangler environments: a pull
+request uploads a version of the one production Worker at a `pr-<number>`
+alias. So there is one secret to set, on that Worker, and nothing per preview.
+Check it once at the first preview: its `/api/accuracy` should answer rather
+than fail to connect (docs/research/cloudflare-static-assets.md).
 
 From `api/`, with the pooled reader URL on the clipboard:
 
