@@ -8,6 +8,10 @@ status: accepted
 > "Docker for exactly one thing" becomes "one *service*". Postgres is still
 > all `docker compose up` starts, and nothing is developed in a container —
 > but `dbmate` is invoked as a one-shot container so `pg_dump` is pinned.
+>
+> **One named exception, [ADR-0015](0015-the-running-metric-is-computed-in-the-worker.md):**
+> the running metric is derived per request, by the Worker, from stored per-day
+> published metrics. Every other figure is still read, not computed.
 
 The opening sketch proposed four services in four containers. This replaces it.
 v1 is a **backtest over a frozen dataset**, so there is nothing to scrape and

@@ -133,7 +133,10 @@ An accuracy figure computed over every delivery period from the start of the
 record up to and including a given delivery day — a cumulative sum divided by the
 count of periods, not a rolling window. Plotted across the record it shows a
 whole-period figure settling rather than a day being scored, which is how the
-dashboard exposes the 2022 distortion without a per-year breakdown. See ADR-0007.
+dashboard exposes the 2022 distortion without a per-year breakdown. It is not
+stored: the read API derives it from the per-day published metrics, and the
+running rMAE is the ratio of two running MAEs, not a running mean of per-day
+ratios. See ADR-0007 and ADR-0015.
 _Avoid_: rolling, moving average, cumulative metric
 
 **Backtest**:
@@ -153,7 +156,8 @@ _Avoid_: leaderboard, results, performance
 An accuracy figure with a fixed definition, computed once when the forecasts it
 describes are written, and thereafter read rather than recalculated. Every number
 the scoreboard shows is one, so all readers see the same figure computed the same
-way. See ADR-0004.
+way. The single exception is the running metric, which is derived at read time
+from per-day published metrics (ADR-0015). See ADR-0004.
 _Avoid_: stat, score, aggregate
 
 **Grid repair**:
