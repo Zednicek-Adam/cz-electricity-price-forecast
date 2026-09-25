@@ -25,9 +25,13 @@ def database_url() -> str:
 
 @pytest.fixture
 def db(database_url: str) -> Iterator[psycopg.Connection]:
-    """A connection whose every write is rolled back when the test ends."""
+    """A connection whose every write is rolled back when the test ends.
+
+    The connection is not in autocommit, so everything a test does, including a
+    `conn.transaction()` block in the code under test (which becomes a
+    savepoint), sits inside one transaction that is rolled back at the end.
+    """
     with psycopg.connect(database_url) as conn:
-        conn.execute("BEGIN")
         try:
             yield conn
         finally:
