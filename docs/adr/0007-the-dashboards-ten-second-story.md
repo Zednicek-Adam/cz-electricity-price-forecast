@@ -4,6 +4,10 @@ status: accepted
 
 # One chart is the dashboard: the day, the record, and one metric selector
 
+> **Open question settled by [ADR-0015](0015-the-running-metric-is-computed-in-the-worker.md):**
+> the running metric is derived in the Worker from the per-day published
+> metrics, and is not stored.
+
 The dashboard leads with **a single hero chart carrying two views**, switched in
 place and sharing one metric selector:
 
@@ -115,12 +119,17 @@ outside the app still says day-lag naïve.
   Over time view shows the stable version, and adding a caveat would be prose.
 - **`month` scope is stored and unrendered.** Not a defect; the read model may
   legitimately hold more than one reader consumes.
-- **The API surface is now implied**: one day of prices for all models, the
-  running series per model per metric, the whole-record metric table, and the
-  DM statistics by period ordinal. All four are reads of `published_metric` and
-  the forecast tables, so ADR-0004's "the request path never computes" holds —
-  though the running series is the one that will want precomputing rather than
-  aggregating on read.
+- **The API surface is now implied**, and it is **five** endpoints: one day of
+  prices for all models, the running series per model for a selected metric
+  (the Over time view), the per-day metric series for the headline model (the
+  ribbon, and worst/best/random), the whole-record metric table, and the DM
+  statistics by period ordinal. The Over time view and the ribbon are
+  different series: one is cumulative, the other one day at a time. An earlier
+  reading of this list counted four endpoints by folding them together.
+  Four of the five are plain reads of `published_metric`, `model_comparison`
+  and the forecast tables. The running series is the exception. It is derived
+  in the Worker from the `delivery_day` rows, and
+  [ADR-0015](0015-the-running-metric-is-computed-in-the-worker.md) records why.
 - **A front-end quality pass is real work and is not this ticket.** The
   prototype is deliberately plain so that structure was what got judged; making
   it genuinely good-looking is separate, and lands after the stack stands up.

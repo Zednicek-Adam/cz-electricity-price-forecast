@@ -36,8 +36,8 @@ is honest evaluation. AR-168 still ships, so a fitted model is on the scoreboard
 just not in front.
 
 **LEAR in the roster.** The strongest fitted competitor, and the model that would
-make Chronos work hardest for its win. Rejected on cost: ADR-0017's ruling (issue
-#17) bans `epftoolbox` from this repo and every deployed artifact, so LEAR means
+make Chronos work hardest for its win. Rejected on cost: issue #17's ruling bans
+`epftoolbox` from this repo and every deployed artifact, so LEAR means
 ~400 lines of sklearn written from scratch and defended, plus a daily-recalibration
 path in the runner and ~2.4 h per full replay. Three models already make a
 scoreboard.
