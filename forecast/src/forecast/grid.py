@@ -4,7 +4,7 @@ Observed prices are stored at true market periods, so a delivery day in
 `Europe/Prague` has 23, 24 or 25 of them. The models work on a regular grid of
 24 period ordinals. Grid repair flattens the first onto the second:
 
-* an ordinary hour keeps its price;
+* an ordinary delivery period keeps its price;
 * on a fall-back day the two periods sharing the local label 02:00 are averaged
   into one;
 * on a spring-forward day the missing 02:00 is interpolated linearly, as the
@@ -12,9 +12,10 @@ Observed prices are stored at true market periods, so a delivery day in
 
 It is lossy, and it is applied exactly once: the loader stores its output in
 `repaired_observed_price`, in the same transaction as the observed prices, and
-everything downstream reads the stored series. Nothing repairs at read time.
+everything downstream reads the stored repaired observed prices. Nothing
+applies grid repair at read time.
 
-Prices are `Decimal` so the repair is exact: the mean of two prices published to
+Prices are `Decimal` so grid repair is exact: the mean of two prices published to
 two decimals has at most three, and `numeric` stores it as it is.
 """
 
@@ -27,7 +28,7 @@ from zoneinfo import ZoneInfo
 
 PRAGUE = ZoneInfo("Europe/Prague")
 HOUR = timedelta(hours=1)
-PERIODS_PER_DAY = 24
+REPAIRED_PERIODS_PER_DAY = 24
 
 
 class IncompleteDeliveryDay(ValueError):
@@ -65,8 +66,8 @@ def repair_day(day: date, prices: Mapping[datetime, Decimal]) -> list[RepairedPr
     """One delivery day on the regular 24-period grid.
 
     `prices` maps UTC period starts to prices and must hold every true period of
-    the day. Anything missing raises: repair is a declared transformation of
-    known-good data, never a way of filling a gap.
+    the day. Anything missing raises: grid repair is a declared transformation
+    of known-good data, never a way of filling a gap.
     """
     missing = [p for p in true_periods(day) if p not in prices]
     if missing:
@@ -75,16 +76,16 @@ def repair_day(day: date, prices: Mapping[datetime, Decimal]) -> list[RepairedPr
             f" first {missing[0]:%Y-%m-%dT%H:%MZ}"
         )
     repaired = []
-    for hour in range(PERIODS_PER_DAY):
-        label = datetime(day.year, day.month, day.day, hour)
+    for ordinal in range(1, REPAIRED_PERIODS_PER_DAY + 1):
+        label = datetime(day.year, day.month, day.day, ordinal - 1)
         # For a label that occurs twice, fold=0 is the first (CEST) instant and
         # fold=1 the second (CET). For a label that does not occur at all,
         # fold=0 resolves forwards and fold=1 backwards, onto the two periods
-        # either side of the gap. Either way the mean is the thesis's repair.
+        # either side of the gap. Either way the mean is the thesis's rule.
         early = label.replace(tzinfo=PRAGUE, fold=0).astimezone(UTC)
         late = label.replace(tzinfo=PRAGUE, fold=1).astimezone(UTC)
         price = prices[early] if early == late else (prices[early] + prices[late]) / 2
-        repaired.append(RepairedPrice(day, hour + 1, price))
+        repaired.append(RepairedPrice(day, ordinal, price))
     return repaired
 
 

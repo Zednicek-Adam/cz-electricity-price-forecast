@@ -13,15 +13,14 @@ import pytest
 
 from forecast.grid import IncompleteDeliveryDay
 from forecast.loader import (
-    FROZEN_RETRIEVED_AT,
-    FROZEN_SOURCE,
+    FROZEN_PROVENANCE,
     ConflictingObservedPrice,
     ObservedPrice,
     load_frozen_dataset,
     load_observed_prices,
 )
 
-# SHA-256 of the thesis's repaired series, `epf-diploma/sources/CZ.csv`, which
+# SHA-256 of the thesis's grid-repaired prices, `epf-diploma/sources/CZ.csv`, which
 # is private: one line per row, `<date>,<el_price>`, joined by newlines, with
 # each price quantized to three decimals. The thesis averaged in floating
 # point, so a repaired value such as 19.37 is stored there as
@@ -58,7 +57,7 @@ def test_every_period_of_the_frozen_dataset_is_stored_with_its_provenance(
     assert count(writer, "observed_price") == 61_368
     assert writer.execute(
         "SELECT DISTINCT source, retrieved_at, resolution_minutes FROM observed_price"
-    ).fetchall() == [(FROZEN_SOURCE, FROZEN_RETRIEVED_AT, 60)]
+    ).fetchall() == [(FROZEN_PROVENANCE.source, FROZEN_PROVENANCE.retrieved_at, 60)]
     assert writer.execute(
         "SELECT min(delivery_start), max(delivery_start) FROM observed_price"
     ).fetchone() == (
@@ -67,7 +66,7 @@ def test_every_period_of_the_frozen_dataset_is_stored_with_its_provenance(
     )
 
 
-def test_the_repaired_series_reproduces_the_thesis_exactly(
+def test_the_repaired_observed_prices_reproduce_the_thesis_exactly(
     writer: psycopg.Connection,
 ) -> None:
     load_frozen_dataset(writer)
@@ -114,6 +113,28 @@ def test_a_daylight_saving_day_keeps_its_true_periods_and_repairs_to_24(
     assert repaired[2][1] == repaired_0200
 
 
+def test_the_record_is_an_unbroken_hourly_grid_with_seven_short_and_seven_long_days(
+    writer: psycopg.Connection,
+) -> None:
+    load_frozen_dataset(writer)
+
+    # Consecutive periods one hour apart everywhere; the primary key already
+    # rules out duplicates.
+    assert writer.execute(
+        "SELECT count(*) FROM (SELECT delivery_start - lag(delivery_start)"
+        " OVER (ORDER BY delivery_start) AS step FROM observed_price) AS steps"
+        " WHERE step <> interval '1 hour'"
+    ).fetchone() == (0,)
+    per_day = dict(
+        writer.execute(
+            "SELECT n, count(*) FROM (SELECT count(*) AS n FROM observed_price"
+            " GROUP BY (delivery_start AT TIME ZONE 'Europe/Prague')::date) AS days"
+            " GROUP BY n"
+        ).fetchall()
+    )
+    assert per_day == {23: 7, 24: 2543, 25: 7}
+
+
 def test_every_delivery_day_repairs_to_exactly_24_periods(
     writer: psycopg.Connection,
 ) -> None:
@@ -156,37 +177,43 @@ def test_a_conflicting_observed_price_raises_and_writes_nothing(
     )
 
 
-def test_both_tables_are_written_in_one_transaction(db: psycopg.Connection) -> None:
+def test_both_tables_are_written_in_one_transaction(database_url: str) -> None:
     # Make the second of the two writes fail inside Postgres, after the first
-    # has gone through, and check that the first did not survive it.
-    db.execute(
-        "CREATE FUNCTION refuse() RETURNS trigger LANGUAGE plpgsql AS"
-        " $$ BEGIN RAISE EXCEPTION 'refused'; END $$"
-    )
-    db.execute(
-        "CREATE TRIGGER refuse BEFORE INSERT ON repaired_observed_price"
-        " FOR EACH ROW EXECUTE FUNCTION refuse()"
-    )
-    db.execute("SET LOCAL ROLE app_writer")
-
-    with pytest.raises(psycopg.errors.RaiseException):
-        load_frozen_dataset(db)
-
-    assert count(db, "observed_price") == 0
+    # has gone through, and check from another connection that the first did
+    # not survive it. The loader runs on a fresh connection here, not inside
+    # the `db` fixture's transaction, so this is its real BEGIN and ROLLBACK
+    # rather than a savepoint.
+    with psycopg.connect(database_url, autocommit=True) as admin:
+        admin.execute(
+            "CREATE FUNCTION pg_temp.refuse() RETURNS trigger LANGUAGE plpgsql AS"
+            " $$ BEGIN RAISE EXCEPTION 'refused'; END $$"
+        )
+        admin.execute(
+            "CREATE TRIGGER refuse BEFORE INSERT ON repaired_observed_price"
+            " FOR EACH ROW EXECUTE FUNCTION pg_temp.refuse()"
+        )
+        try:
+            with psycopg.connect(database_url, autocommit=True) as loader_conn:
+                loader_conn.execute("SET ROLE app_writer")
+                loader_conn.autocommit = False
+                with pytest.raises(psycopg.errors.RaiseException):
+                    load_frozen_dataset(loader_conn)
+            assert count(admin, "observed_price") == 0
+        finally:
+            admin.execute("DROP TRIGGER refuse ON repaired_observed_price")
 
 
 def test_a_delivery_day_with_a_missing_period_raises_and_writes_nothing(
     writer: psycopg.Connection,
 ) -> None:
+    local_midnight = datetime(2024, 5, 31, 22, tzinfo=UTC)  # 2024-06-01, CEST
     day = [
-        ObservedPrice(datetime(2024, 6, 1, h, tzinfo=UTC) - timedelta(hours=2), 60, p)
-        for h, p in enumerate(Decimal(n) for n in range(24))
+        ObservedPrice(local_midnight + timedelta(hours=i), 60, Decimal(i))
+        for i in range(24)
+        if i != 5
     ]
-    del day[5]
 
     with pytest.raises(IncompleteDeliveryDay):
-        load_observed_prices(
-            writer, day, source="test", retrieved_at=FROZEN_RETRIEVED_AT
-        )
+        load_observed_prices(writer, day, FROZEN_PROVENANCE)
 
     assert count(writer, "observed_price") == 0
