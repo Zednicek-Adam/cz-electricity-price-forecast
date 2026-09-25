@@ -1,7 +1,7 @@
 """The runner: everything a model is not allowed to touch (ADR-0002).
 
-It owns the cutoff slicing, the check that the history a model needs is
-complete, and the writing. A forecast run is one model for one delivery day,
+It owns the day loop, the cutoff slicing, the check that the history a model
+needs is complete, and the writing. A forecast run is one model for one delivery day,
 producing 24 forecasts.
 
 **The cutoff** (`forecast.model.cutoff`) is derived from the target delivery
@@ -18,9 +18,11 @@ fabricated one is not.
 transaction, all or nothing. Never an upsert: the writer role holds no `UPDATE`.
 """
 
+import logging
 import math
 import os
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
@@ -33,6 +35,8 @@ from forecast.history import HistoryProvider
 from forecast.model import Model, cutoff
 
 RunType = Literal["backtest", "live"]
+
+log = logging.getLogger(__name__)
 
 
 class HistoryGap(ValueError):
@@ -122,6 +126,27 @@ def write_run(
                         executed_at,
                     )
                 )
+
+
+def run_days(
+    conn: psycopg.Connection,
+    model: Model,
+    days: Iterable[date],
+    provider: HistoryProvider,
+    *,
+    run_type: RunType,
+    code_version: str,
+) -> int:
+    """The day loop: one forecast run per delivery day, each written as it
+    finishes. The first run that cannot be made raises and stops the loop."""
+    runs = 0
+    for day in days:
+        run = run_forecast(model, day, provider)
+        write_run(conn, run, run_type=run_type, code_version=code_version)
+        runs += 1
+        if (day.month, day.day) == (1, 1):
+            log.info("%s: reached %s", model.slug, day)
+    return runs
 
 
 def current_code_version() -> str:
