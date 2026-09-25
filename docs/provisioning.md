@@ -337,9 +337,9 @@ returns rows rather than a connection error.
 ## Not in this checklist
 
 ADR-0013's provisioning table has two more phase-3 rows that #38 does not carry:
-the **root README** with issue #20's four obligations (#51, due before the first
-pull request that touches `web/`) and the **persistent dashboard footer
-attribution** (#53). Both come due at the first preview deploy, because a
+the **root README** with issue #20's four obligations (#51) and the
+**persistent dashboard footer attribution** (#53). Both come due at the first
+preview deploy, because a
 Cloudflare preview URL is publicly reachable whatever the repository's
 visibility.
 
