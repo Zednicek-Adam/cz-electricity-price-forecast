@@ -18,7 +18,7 @@ import pytest
 LOCAL_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/czepf"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def database_url() -> str:
     return os.environ.get("DATABASE_URL", LOCAL_DATABASE_URL)
 
@@ -27,12 +27,12 @@ def database_url() -> str:
 def db(database_url: str) -> Iterator[psycopg.Connection]:
     """A connection whose every write is rolled back when the test ends.
 
-    The connection is not in autocommit, so everything a test does, including a
-    `conn.transaction()` block in the code under test (which becomes a
-    savepoint), sits inside one transaction that is rolled back at the end.
+    Everything a test does, including a `conn.transaction()` block in the code
+    under test (which becomes a savepoint), sits inside one transaction that is
+    rolled back at the end, whatever the test's first statement is.
     """
-    with psycopg.connect(database_url) as conn:
-        try:
-            yield conn
-        finally:
-            conn.rollback()
+    with (
+        psycopg.connect(database_url) as conn,
+        conn.transaction(force_rollback=True),
+    ):
+        yield conn

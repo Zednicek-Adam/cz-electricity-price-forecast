@@ -26,12 +26,16 @@ from pathlib import Path
 
 import psycopg
 
-from forecast.grid import RepairedPrice, day_bounds, delivery_day, repair_grid
+from forecast.grid import (
+    RESOLUTION_MINUTES,
+    RepairedPrice,
+    day_bounds,
+    delivery_day,
+    repair_grid,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FROZEN_DATASET = REPO_ROOT / "data" / "cz-day-ahead-prices.csv"
-
-RESOLUTION_MINUTES = 60
 
 
 class ConflictingObservedPrice(ValueError):
