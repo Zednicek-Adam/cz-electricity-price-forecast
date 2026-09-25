@@ -48,7 +48,19 @@ describe("GET /api/days/:deliveryDate", () => {
           prices: ordinals.map((o) => price(ORDINARY_DAY, o, OFFSETS.daylag)),
         },
       ],
+      metrics: [],
     });
+  });
+
+  test("carries each model's published metrics for the day, as stored", async () => {
+    const body = await day(FIRST_DAY);
+
+    // The first day of test/metrics-fixture.ts.
+    expect(body.metrics).toEqual([
+      { model: "chronos2", mae: 4, rmse: 5, smape: 8, rmae: 0.4 },
+      { model: "ar168", mae: 5, rmse: 6, smape: 10, rmae: 0.5 },
+      { model: "daylag", mae: 10, rmse: 12, smape: 20, rmae: 1 },
+    ]);
   });
 
   test.each([SPRING_FORWARD, FALL_BACK])(

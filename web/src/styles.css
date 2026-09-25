@@ -1,0 +1,215 @@
+/* Deliberately plain: the front-end quality pass is its own later work
+   (ADR-0007). Light only; dark mode is out of v1. */
+:root {
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6f6e69;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --series-observed: #0b0b0b;
+  --series-chronos2: #2a78d6;
+  --series-ar168: #d4561f;
+  --series-daylag: #138a5f;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--plane);
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 20px 0;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+h2 {
+  font-size: 26px;
+}
+
+a {
+  color: var(--series-chronos2);
+}
+
+.caption,
+.headline-numbers dt,
+th {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Only the caption is set in capitals: metric names such as rMAE are case
+   sensitive, so labels that carry them keep their own case. */
+.caption {
+  text-transform: uppercase;
+  margin: 4px 0 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.hero-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 6px;
+}
+
+button {
+  font: inherit;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--axis);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.headline-numbers {
+  display: flex;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin: 12px 0 6px;
+}
+
+.headline-numbers dd {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.unit {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 6px;
+}
+
+/* Charts scale by viewBox, not by measurement (ADR-0009). */
+.chart {
+  position: relative;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ticks-sparse {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .ticks-dense {
+    display: none;
+  }
+  .ticks-sparse {
+    display: inline;
+  }
+}
+
+.tooltip {
+  position: absolute;
+  top: 8px;
+  transform: translateX(12px);
+  pointer-events: none;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tooltip-left {
+  transform: translateX(calc(-100% - 12px));
+}
+
+.tooltip-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.tooltip-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--grid);
+}
+
+th:first-child,
+td:first-child,
+tbody th {
+  text-align: left;
+}
+
+footer {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 20px 0;
+}
