@@ -2,10 +2,12 @@
 others. Chronos-2 joins in phase 4 (ADR-0013)."""
 
 from forecast.model import Model
+from forecast.models.ar168 import AR168
 from forecast.models.daylag import DayLagNaive
 
 ROSTER: dict[str, type[Model]] = {
     DayLagNaive.slug: DayLagNaive,
+    AR168.slug: AR168,
 }
 
 
