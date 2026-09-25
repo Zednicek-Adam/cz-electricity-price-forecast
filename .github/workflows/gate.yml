@@ -53,6 +53,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
+      # The API's tests run against the same compose Postgres as the db job,
+      # and its row types are generated from it (ADR-0004): regenerate them and
+      # fail if the committed file no longer matches the migrations.
+      - run: docker compose up -d --wait db
+      - run: docker compose run --rm dbmate up
+      - run: pnpm --filter @cz-epf/api db:types
+      - name: api/src/db.generated.ts matches the migrated database
+        run: git diff --exit-code api/src/db.generated.ts
       - run: pnpm test
 
   # The Postgres here is the `db` service of docker-compose.yml, not a copy of

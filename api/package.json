@@ -8,10 +8,18 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "db:types": "tsx scripts/generate-db-types.ts"
   },
   "devDependencies": {
+    "@types/node": "22",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.141.0"
+  },
+  "dependencies": {
+    "hono": "^4.13.9",
+    "postgres": "^3.4.9"
   }
 }
