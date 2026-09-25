@@ -140,6 +140,21 @@ DATABASE_URL=postgresql://app_writer:app_writer@localhost:5432/czepf \
   uv run python -m forecast.replay --models daylag,ar168 --start 2020-01-01 --end 2024-12-31
 ```
 
+After a full replay, `forecast.verify` checks what the store holds: 24
+backtest forecasts per model on each of the 1,827 delivery days, with no year
+excluded; 24 period ordinals on every daylight-saving day; the naïve's overall
+rMAE at exactly 1.000; and derived rows describing exactly the models
+replayed. It only reads, so the reader role is enough:
+
+```sh
+DATABASE_URL=postgresql://app_reader:app_reader@localhost:5432/czepf \
+  uv run python -m forecast.verify --models daylag,ar168
+```
+
+The first full replay into Neon is driven from the author's machine as the
+writer role (ADR-0013), using the two commands above with `DATABASE_URL` set
+to the `NEON_WRITER` URL.
+
 Against Neon it runs from the `replay` workflow, which is `workflow_dispatch`
 only, as the writer role. Nothing runs it on a merge or on a schedule. The
 tests expect an empty local database, so replay into a separate one, or
