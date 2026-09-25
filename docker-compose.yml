@@ -23,6 +23,9 @@ services:
       - "5432:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
+      # Creates `app_writer` and `app_reader` when the volume is first
+      # initialised, so the grant migration applies here as it does on Neon.
+      - ./db/local-roles.sql:/docker-entrypoint-initdb.d/local-roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d czepf"]
       interval: 2s

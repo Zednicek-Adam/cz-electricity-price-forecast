@@ -49,14 +49,15 @@ reader under phase 2: the *credential* is first consumed in phase 2 by the API,
 but the *role* has to exist a phase earlier. Creating all three roles in one
 sitting at phase 0 costs nothing and removes the hazard entirely.
 
-**No ticket grants the writer.** #42 carries the reader's `SELECT` grant and
-nothing else; no open issue mentions a `GRANT` at all. A role created with
-`CREATE ROLE` holds only what `PUBLIC` holds, which is no access to any table —
-so the writer row below can be ticked with a credential that cannot write, and
-the failure surfaces in #47's replay rather than here. Whoever writes #42's
-migration should carry the writer's `INSERT`/`UPDATE`/`DELETE`/`SELECT` and its
-sequence usage alongside the reader's `SELECT`, or #38's writer row is ticked
-against a role that does nothing. This is a gap in the tickets, not in ADR-0005.
+**The writer's grants are narrower than "read/write".**
+`db/migrations/20260925000001_grant_the_writer_and_the_reader.sql` grants
+`app_writer` exactly the verbs ADR-0005's write semantics use. On
+`observed_price` and `repaired_observed_price` it may `SELECT` and `INSERT`
+only, so the historical record cannot be rewritten by the role that loads it.
+On `forecast`, `published_metric` and `model_comparison` it may `SELECT`,
+`INSERT` and `DELETE`. It never gets `UPDATE`, because a re-run replaces rows
+rather than upserting them. There are no sequences, since every key is
+natural.
 
 ## Names
 
@@ -78,10 +79,9 @@ session reads it here instead of guessing.
 The two Cloudflare names are not a free choice: `cloudflare/wrangler-action`
 documents exactly those, so they are settled here.
 
-Postgres role names are the same kind of open question. Neon's default owner is
-`neondb_owner`; the SQL below uses **`app_writer`** and **`app_reader`** as
-suggestions. Whichever value the `GRANT` migration uses is the real one — make
-this file agree with it.
+Postgres role names are fixed by the grant migration: **`app_writer`** and
+**`app_reader`**. Neon's default owner is `neondb_owner`. The migration fails
+on a database where either role is missing, rather than skipping the grant.
 
 Placeholders in the commands below read `<OWNER-SECRET-NAME>`,
 `<WRITER-SECRET-NAME>` and `<READER-SECRET-NAME>`. Substitute, don't paste.
@@ -188,8 +188,8 @@ CREATE ROLE app_writer WITH LOGIN PASSWORD '<long-random-alphanumeric>';
 ```
 
 That is the whole manual step. No `GRANT` by hand: the writer's privileges belong
-in a migration, run by the owner — but read the third hazard first, because no
-ticket currently carries that migration.
+in a migration, run by the owner. The third hazard says which privileges it
+gets.
 
 Neon will not show you a connection string for a role it did not create, so build
 it from the owner's by swapping the role and password and leaving the host,
@@ -234,22 +234,16 @@ wanted a phase earlier than this row sits.
 CREATE ROLE app_reader WITH LOGIN PASSWORD '<long-random-alphanumeric>';
 ```
 
-Again, no `GRANT` by hand. #42's migration grants `CONNECT`, `USAGE` on the
-schema, and `SELECT` — no `INSERT`, `UPDATE` or `DELETE` anywhere, which is what
-"restricted to `SELECT`" means here. Neon's own read-only-role shape, for that
-migration's author:
+Again, no `GRANT` by hand. The grant migration gives the reader `USAGE` on the
+schema and `SELECT` on each of the five tables by name, with no `INSERT`,
+`UPDATE` or `DELETE` anywhere. That is what "restricted to `SELECT`" means
+here.
 
-```sql
-GRANT CONNECT ON DATABASE neondb TO app_reader;
-GRANT USAGE ON SCHEMA public TO app_reader;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_reader;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO app_reader;
-```
-
-The `ALTER DEFAULT PRIVILEGES` line is the one that is easy to leave out and
-expensive to miss: without it the reader can select from today's tables and not
-from the ones a later migration adds, and the failure surfaces as an endpoint
-that works locally and 500s in production.
+It deliberately uses no `ALTER DEFAULT PRIVILEGES`. A migration that adds a
+table grants on it explicitly, so the grant shows in the diff of the pull
+request that adds the table. The cost is that forgetting it makes an endpoint
+that works locally as `postgres` and fails in production as the reader. The
+API's tests connect as the reader for that reason.
 
 "Restricted to `SELECT`" is a statement about tables, not about everything. A
 freshly created role also inherits whatever `PUBLIC` holds — `CONNECT` and `TEMP`
