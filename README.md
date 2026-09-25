@@ -1,5 +1,7 @@
 # CZ Day-Ahead Price Forecast
 
+[![main](https://github.com/Zednicek-Adam/cz-electricity-price-forecast/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/Zednicek-Adam/cz-electricity-price-forecast/actions/workflows/main.yml)
+
 A public dashboard that forecasts day-ahead electricity prices for the Czech
 bidding zone (`BZN|CZ`) and scores its own forecasts against the market outcome
 once it is known.
@@ -98,6 +100,18 @@ cd forecast && uv run ruff check . && uv run ruff format --check . && uv run pyt
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 docker compose run --rm dbmate up   # then: git diff --exit-code db/schema.sql
 ```
+
+In CI these are the `python`, `typescript` and `db` jobs of
+`.github/workflows/gate.yml`. They run in parallel on every pull request, with
+no path filtering, and `all-green` is the one required check behind them. The
+`db` job brings up the same `docker-compose.yml` services, so CI and a laptop
+share one pin for both images.
+
+A merge to `main` runs `.github/workflows/main.yml`. Its `migrate` job runs
+`dbmate up` against Neon as the owner role, from the `production` Environment.
+Migrations are expand-only, and `dbmate down` is never run against Neon. The
+badge at the top of this file is that workflow's status: if it is red, `main`
+is not what is running.
 
 Ruff's scope is the `forecast/` unit. `data/` and `analysis/` hold one-off
 scripts that ran once and are kept for their provenance, and they are outside
