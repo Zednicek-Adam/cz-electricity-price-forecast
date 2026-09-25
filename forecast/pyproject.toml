@@ -3,7 +3,9 @@ name = "forecast"
 version = "0.1.0"
 description = "Loader, models and runner for the CZ day-ahead price forecast"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "psycopg[binary]>=3.2",
+]
 
 [dependency-groups]
 dev = [

@@ -32,6 +32,12 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      # The persistence tests run against the same compose Postgres as the db
+      # job, migrated the same way: there is no mocked database anywhere.
+      - run: docker compose up -d --wait db
+        working-directory: .
+      - run: docker compose run --rm dbmate up
+        working-directory: .
       - run: uv run pytest
 
   typescript:

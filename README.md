@@ -57,6 +57,11 @@ Nothing is *developed* inside a container: `uv`, `pnpm`, `wrangler dev` and
 Vite all run natively (ADR-0004). Docker runs Postgres, and runs `dbmate` as a
 one-shot for the reason the next section gives.
 
+The local Postgres also creates the two application roles, `app_writer` and
+`app_reader`, from `db/local-roles.sql` when its volume is first initialised,
+so the grant migration applies locally as it does on Neon. A volume created
+before that file existed needs `docker compose down -v` once.
+
 The database listens on `localhost:5432` as
 `postgres://postgres:postgres@localhost:5432/czepf`. `docker-compose.yml` is
 where its version is fixed; the pull request gate runs against the same image,
@@ -71,7 +76,7 @@ match what the migrations produce — so regenerate it in the same commit that
 adds a migration:
 
 ```sh
-docker compose run --rm dbmate new add_observed_price  # scaffold a migration
+docker compose run --rm dbmate new add_a_table         # scaffold a migration
 docker compose run --rm dbmate up                      # apply, and rewrite db/schema.sql
 docker compose run --rm dbmate dump                    # rewrite db/schema.sql alone
 ```
@@ -96,7 +101,7 @@ owner role. `dbmate down` is never run against Neon (ADR-0010).
 The same three sets the pull request gate runs:
 
 ```sh
-cd forecast && uv run ruff check . && uv run ruff format --check . && uv run pytest
+cd forecast && uv run ruff check . && uv run ruff format --check . && uv run pytest  # needs the migrated db
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 docker compose run --rm dbmate up   # then: git diff --exit-code db/schema.sql
 ```
