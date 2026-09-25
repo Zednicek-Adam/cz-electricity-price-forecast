@@ -1,0 +1,11 @@
+{
+  // The read API and, from phase 3, the client's static assets (ADR-0004).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cz-epf",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-01",
+  // postgres.js reaches Postgres over TCP through the Node compatibility layer.
+  "compatibility_flags": ["nodejs_compat"],
+  // `NEON_READER` is a secret: `api/.dev.vars` locally, `wrangler secret put`
+  // once deployed. It never enters GitHub (ADR-0010).
+}

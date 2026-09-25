@@ -6,7 +6,12 @@ export default tseslint.config(
     // Only what is not source. Everything else is linted on purpose: TypeScript
     // is supposed to live in `api/` and `web/`, and a file that turns up
     // outside them should fail loudly rather than go unchecked.
-    ignores: ["**/node_modules/**", "**/dist/**", ".scratch-*/**"],
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.wrangler/**",
+      ".scratch-*/**",
+    ],
   },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
