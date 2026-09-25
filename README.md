@@ -9,13 +9,9 @@ the build order. This README carries only what a developer needs to run the
 repository locally. The project's narrative, its accuracy disclosures and
 issue #20's attribution obligations land here in phase 3 (issue #51).
 
-ADR-0013 dates those obligations "before the first pull request that touches
-`web/`", and this is that pull request. They are deferred anyway, deliberately:
-what the date is a proxy for is the **first preview deploy**, which is what
-makes the dashboard publicly reachable, and no preview deploy exists until
-phase 3 builds the `deploy` job. Until then `data/NOTICE` carries the
-attribution, the no-endorsement line and the take-down commitment beside the
-data they cover.
+ADR-0013 dates those obligations at the first preview deploy, which phase 3
+builds. Until then `data/NOTICE` carries the attribution, the no-endorsement
+line and the take-down commitment beside the data they cover.
 
 ## The four units
 
@@ -39,12 +35,20 @@ Most of this is still scaffolding. Nothing forecasts and nothing renders yet.
 [uv](https://docs.astral.sh/uv/getting-started/installation/). No local
 Postgres client and no local `dbmate` — both run in containers.
 
-Three commands take a clone to a migrated local database:
+Two commands take a clone to a migrated local database. Neither needs a
+toolchain installed, because both run in containers:
 
 ```sh
-pnpm install && uv sync --project forecast   # the two toolchains
-docker compose up -d db                      # Postgres
-docker compose run --rm dbmate up            # apply db/migrations/
+docker compose up -d db                # Postgres on localhost:5432
+docker compose run --rm dbmate up      # apply db/migrations/
+```
+
+The two toolchains are a separate step. The database does not need them;
+everything else does:
+
+```sh
+pnpm install                  # api/ and web/
+uv sync --project forecast    # forecast/
 ```
 
 Nothing is *developed* inside a container: `uv`, `pnpm`, `wrangler dev` and
@@ -79,8 +83,7 @@ either is a commit that regenerates the schema file.
 `db/schema.sql` is a record of what the migrations add up to, so that a pull
 request changing the cross-language contract shows that change in its diff
 (ADR-0005). It is never applied: the migrations are. It is also written by
-`pg_dump` 18, so it carries `
-estrict` meta-commands that an older `psql`
+`pg_dump` 18, so it carries `\restrict` meta-commands that an older `psql`
 cannot read.
 
 Migrations against Neon run from GitHub Actions on merge to `main`, as the
@@ -92,13 +95,19 @@ The same three sets the pull request gate runs:
 
 ```sh
 cd forecast && uv run ruff check . && uv run ruff format --check . && uv run pytest
-pnpm typecheck && pnpm lint && pnpm test
+pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 docker compose run --rm dbmate up   # then: git diff --exit-code db/schema.sql
 ```
 
 Ruff's scope is the `forecast/` unit. `data/` and `analysis/` hold one-off
 scripts that ran once and are kept for their provenance, and they are outside
 the gate deliberately.
+
+Each language has a linter and a formatter: `ruff check` and `ruff format` for
+Python, `eslint` and `prettier` for TypeScript. `pnpm format` writes the fixes;
+`pnpm format:check` is what the gate runs. Prettier's scope is code — prose is
+hand-wrapped, so `.prettierignore` excludes `*.md` along with the generated
+files the gate compares byte for byte.
 
 ### Stopping
 

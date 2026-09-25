@@ -1,0 +1,21 @@
+# Generated or vendored, and compared byte for byte by the pull request gate
+# (ADR-0010) — reformatting them is exactly what must not happen.
+pnpm-lock.yaml
+forecast/uv.lock
+db/schema.sql
+
+# Not ours to format.
+node_modules/
+dist/
+.scratch-*/
+
+# One-off scripts kept for their provenance, outside the gate on purpose —
+# the same carve-out the README documents for ruff.
+data/
+analysis/
+
+# Prose is hand-wrapped and hand-edited: CONTEXT.md, the ADRs and the README
+# are documents, not code. Prettier's only quarrel with them is its `_emphasis_`
+# spelling, which is not worth reflowing fourteen accepted decisions over.
+# The formatter's scope is the same as the linter's: TypeScript.
+*.md

@@ -4,6 +4,11 @@ status: accepted
 
 # v1 is four units across three vendors, and the request path never computes
 
+> **Partly amended by [ADR-0014](0014-dbmate-runs-in-a-container-so-pg-dump-is-pinned.md):**
+> "Docker for exactly one thing" becomes "one *service*". Postgres is still
+> all `docker compose up` starts, and nothing is developed in a container —
+> but `dbmate` is invoked as a one-shot container so `pg_dump` is pinned.
+
 The opening sketch proposed four services in four containers. This replaces it.
 v1 is a **backtest over a frozen dataset**, so there is nothing to scrape and
 nothing to schedule — the units that survive are the ones v1 actually uses:
