@@ -31,6 +31,22 @@ export interface DeliveryDayResponse {
   /** Repaired observed prices, EUR/MWh, indexed by period ordinal minus one. */
   observed: number[];
   forecasts: ModelForecast[];
+  /**
+   * Each model's published metrics for this delivery day, as stored: the
+   * headline numbers of the Day view. Read, never computed here or in the
+   * client (ADR-0004).
+   */
+  metrics: ModelMetrics[];
+}
+
+/** One model's four published metrics over one scope. `null` where the
+ * figure is undefined and was not published. */
+export interface ModelMetrics {
+  model: ModelSlug;
+  mae: number | null;
+  rmse: number | null;
+  smape: number | null;
+  rmae: number | null;
 }
 
 /** The first and last delivery days the backtest covers. */
@@ -88,15 +104,9 @@ export interface DailyMetricResponse {
   values: number[];
 }
 
-/** One model's row of the accuracy table: the whole record, every metric. */
-export interface AccuracyRow {
-  model: ModelSlug;
-  mae: number | null;
-  rmse: number | null;
-  smape: number | null;
-  /** The day-lag naïve's own row reads exactly 1. */
-  rmae: number | null;
-}
+/** One model's row of the accuracy table: the whole record, every metric.
+ * The day-lag naïve's own row reads rMAE exactly 1. */
+export type AccuracyRow = ModelMetrics;
 
 /** `GET /api/accuracy` — the accuracy table: every model × four metrics. */
 export interface AccuracyResponse {

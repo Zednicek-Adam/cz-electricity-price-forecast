@@ -34,7 +34,6 @@ import type {
 import { connect, type Sql } from "./db.ts";
 import type {
   AccuracyResponse,
-  AccuracyRow,
   BadRequestResponse,
   ComparisonResponse,
   DailyMetricResponse,
@@ -42,6 +41,7 @@ import type {
   Metric,
   MetricSeries,
   ModelForecast,
+  ModelMetrics,
   ModelSlug,
   NotInRecordResponse,
   Opponent,
@@ -151,6 +151,29 @@ function onTheGrid(
   return rows.map((r) => Number(r.price));
 }
 
+/** Published-metric rows as one row of four metrics per model, roster-ordered. */
+function metricsByModel(
+  rows: Pick<PublishedMetricRow, "model" | "metric" | "value">[],
+): ModelMetrics[] {
+  const table = new Map<ModelSlug, ModelMetrics>();
+  for (const row of rows) {
+    const model = rosterModel(row.model);
+    if (!isMetric(row.metric)) {
+      throw new Error(`${row.metric} is not a published metric`);
+    }
+    const entry = table.get(model) ?? {
+      model,
+      mae: null,
+      rmse: null,
+      smape: null,
+      rmae: null,
+    };
+    entry[row.metric] = Number(row.value);
+    table.set(model, entry);
+  }
+  return byRoster([...table.values()], (r) => r.model);
+}
+
 /** Every model's per-day published metric, grouped by model, in delivery-day order. */
 async function dayFigures(
   sql: Sql,
@@ -216,6 +239,14 @@ app.get("/days/:deliveryDate", async (c) => {
     ORDER BY period_ordinal
   `;
 
+  const metrics = await sql<
+    Pick<PublishedMetricRow, "model" | "metric" | "value">[]
+  >`
+    SELECT model, metric, value FROM published_metric
+    WHERE run_type = 'backtest' AND scope_type = 'delivery_day'
+      AND scope_start = ${deliveryDate}
+  `;
+
   const byModel = new Map<ModelSlug, (typeof rows)[number][]>();
   for (const row of rows) push(byModel, rosterModel(row.model), row);
   const forecasts: ModelForecast[] = [...byModel].map(([model, modelRows]) => ({
@@ -227,6 +258,7 @@ app.get("/days/:deliveryDate", async (c) => {
     deliveryDate,
     observed: onTheGrid(`${deliveryDate} observed`, observed),
     forecasts: byRoster(forecasts, (f) => f.model),
+    metrics: metricsByModel(metrics),
   });
 });
 
@@ -281,25 +313,7 @@ app.get("/accuracy", async (c) => {
     SELECT model, metric, value FROM published_metric
     WHERE run_type = 'backtest' AND scope_type = 'overall'
   `;
-  const table = new Map<ModelSlug, AccuracyRow>();
-  for (const row of rows) {
-    const model = rosterModel(row.model);
-    if (!isMetric(row.metric)) {
-      throw new Error(`${row.metric} is not a published metric`);
-    }
-    const entry = table.get(model) ?? {
-      model,
-      mae: null,
-      rmse: null,
-      smape: null,
-      rmae: null,
-    };
-    entry[row.metric] = Number(row.value);
-    table.set(model, entry);
-  }
-  return c.json<AccuracyResponse>({
-    rows: byRoster([...table.values()], (r) => r.model),
-  });
+  return c.json<AccuracyResponse>({ rows: metricsByModel(rows) });
 });
 
 app.get("/comparisons/:model", async (c) => {
