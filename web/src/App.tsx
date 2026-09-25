@@ -23,10 +23,12 @@ import { MetricSelector } from "./MetricSelector.tsx";
 import {
   formatMetric,
   METRIC_PRESENTATION,
+  METRICS,
   MODEL_LABELS,
 } from "./presentation.ts";
 
-/** The day the Day view opens on: the last of the record, not a chosen one. */
+/** The day the Day view opens on: the last day of the fixed backtest window
+ * (ADR-0002), rather than a day picked for how it looks. */
 export const OPENING_DAY: DeliveryDate = "2024-12-31";
 
 type Load<T> =
@@ -54,7 +56,7 @@ function useJson<T>(path: string): Load<T> {
 
 export function App() {
   const [metric, setMetric] = useState<Metric>("mae");
-  const [deliveryDate] = useState<DeliveryDate>(OPENING_DAY);
+  const deliveryDate = OPENING_DAY;
   const day = useJson<DeliveryDayResponse>(`/api/days/${deliveryDate}`);
   const accuracy = useJson<AccuracyResponse>("/api/accuracy");
 
@@ -83,16 +85,20 @@ export function App() {
               <thead>
                 <tr>
                   <th scope="col">Model</th>
-                  <th scope="col">MAE</th>
-                  <th scope="col">{METRIC_PRESENTATION.rmae.label}</th>
+                  {METRICS.map((m) => (
+                    <th key={m} scope="col">
+                      {METRIC_PRESENTATION[m].label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {accuracy.data.rows.map((row) => (
                   <tr key={row.model}>
                     <th scope="row">{MODEL_LABELS[row.model]}</th>
-                    <td>{formatMetric("mae", row.mae)}</td>
-                    <td>{formatMetric("rmae", row.rmae)}</td>
+                    {METRICS.map((m) => (
+                      <td key={m}>{formatMetric(m, row[m])}</td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

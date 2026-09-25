@@ -4,9 +4,6 @@
  */
 import type { Metric, ModelSlug } from "@cz-epf/api";
 
-/** The roster in the order the dashboard lists it. */
-export const MODELS: readonly ModelSlug[] = ["chronos2", "ar168", "daylag"];
-
 /** The benchmark is "Naïve" in the interface; the slug stays `daylag` (ADR-0007). */
 export const MODEL_LABELS: Record<ModelSlug, string> = {
   chronos2: "Chronos-2",

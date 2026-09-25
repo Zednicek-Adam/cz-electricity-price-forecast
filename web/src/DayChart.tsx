@@ -35,6 +35,11 @@ interface Series {
 export function DayChart({ day }: { day: DeliveryDayResponse }) {
   const [hovered, setHovered] = useState<number | null>(null);
 
+  for (const prices of [day.observed, ...day.forecasts.map((f) => f.prices)]) {
+    if (prices.length !== 24) {
+      throw new Error(`${day.deliveryDate}: ${prices.length} prices, not 24`);
+    }
+  }
   const series: Series[] = [
     { key: "observed", label: "Observed", prices: day.observed },
     ...day.forecasts.map((f) => ({
@@ -54,7 +59,9 @@ export function DayChart({ day }: { day: DeliveryDayResponse }) {
     nice: true,
   });
   const [low, high] = y.domain() as [number, number];
-  const labelY = spreadLabels(series.map((s) => y(s.prices[23] ?? 0) + 4));
+  const labelY = spreadLabels(
+    series.map((s) => y(s.prices.at(-1) as number) + 4),
+  );
   const columnWidth = (WIDTH - MARGIN.left - MARGIN.right) / 23;
   const label = `${day.deliveryDate}: the observed price and the forecasts of ${day.forecasts
     .map((f) => MODEL_LABELS[f.model])
@@ -153,8 +160,10 @@ export function DayChart({ day }: { day: DeliveryDayResponse }) {
       </svg>
       {hovered !== null && (
         <div
-          className="tooltip"
           aria-hidden="true"
+          // Right of the crosshair in the morning, left of it later, so it
+          // never runs off the chart's edge.
+          className={hovered > 16 ? "tooltip tooltip-left" : "tooltip"}
           style={{ left: `${(x(hovered) / WIDTH) * 100}%` }}
         >
           <div className="tooltip-title">Period {hovered}</div>
@@ -166,7 +175,7 @@ export function DayChart({ day }: { day: DeliveryDayResponse }) {
               />
               <span>{s.label}</span>
               <span className="figure">
-                {formatPrice(s.prices[hovered - 1] ?? Number.NaN)}
+                {formatPrice(s.prices[hovered - 1] as number)}
               </span>
             </div>
           ))}

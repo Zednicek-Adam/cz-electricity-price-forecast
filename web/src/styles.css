@@ -66,9 +66,6 @@ th {
    sensitive, so labels that carry them keep their own case. */
 .caption {
   text-transform: uppercase;
-}
-
-.caption {
   margin: 4px 0 16px;
 }
 
@@ -175,6 +172,10 @@ button[aria-pressed="true"] {
   border-radius: 6px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.tooltip-left {
+  transform: translateX(calc(-100% - 12px));
 }
 
 .tooltip-title {

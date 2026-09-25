@@ -166,6 +166,21 @@ describe("the Day view", () => {
   });
 });
 
+describe("the accuracy table", () => {
+  test("is a semantic table of every model against four metrics", async () => {
+    render(<App />);
+
+    const table = await screen.findByRole("table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Model", "MAE", "RMSE", "SMAPE", "rMAE"]);
+    const naive = within(table).getByRole("rowheader", { name: "Naïve" });
+    expect(naive.parentElement?.textContent).toBe("Naïve26.144.832.01.000");
+  });
+});
+
 describe("the page", () => {
   test("carries the ENTSO-E attribution and the repository link", () => {
     render(<App />);
