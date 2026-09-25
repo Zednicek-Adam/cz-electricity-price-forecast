@@ -1,11 +1,24 @@
 {
-  // The read API and, from phase 3, the client's static assets (ADR-0004).
+  // One Worker serves the built client and the read API (ADR-0004), in the
+  // shape docs/research/cloudflare-static-assets.md re-verified.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cz-epf",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-01",
   // postgres.js reaches Postgres over TCP through the Node compatibility layer.
   "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    // `pnpm --filter @cz-epf/web build` writes it; build before `wrangler dev`.
+    "directory": "../web/dist",
+    // Any path that is not a file gets index.html, for the client's routing.
+    "not_found_handling": "single-page-application",
+    // Only the API runs the Worker. Every other request is a static asset,
+    // which is free and unmetered.
+    "run_worker_first": ["/api/*"],
+  },
+  // Pull requests upload versions with public URLs on workers.dev (ADR-0010).
+  "workers_dev": true,
+  "preview_urls": true,
   // `NEON_READER` is a secret: `api/.dev.vars` locally, `wrangler secret put`
   // once deployed. It never enters GitHub (ADR-0010).
 }
