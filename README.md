@@ -138,7 +138,7 @@ docker compose down -v  # and drop it
 ## Models
 
 Three models, all univariate, on the roster in `CONTEXT.md` (ADR-0003). The
-day-lag naïve (`daylag`) is the benchmark. AR-168 (`ar168`) is a hand-written
+day-lag naïve (`daylag`) is what rMAE divides by. AR-168 (`ar168`) is a hand-written
 port of `ar_lm_predict` from the author's diploma thesis repository,
 `epf-diploma` (`models/_utils.R`, run by `models/R/AR168.R`). No history was
 transplanted from it, and the bar for the port is its specification, not the

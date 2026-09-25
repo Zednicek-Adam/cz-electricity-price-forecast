@@ -12,6 +12,8 @@ import pandas as pd
 
 from forecast.models.ar168 import AR168, LAGS, diffinv, fit_ar, recurse
 
+CALIBRATION_HOURS = AR168.history_days * 24
+
 
 def simulate_ar(
     intercept: float, coefficients: dict[int, float], n: int, seed: int = 0
@@ -30,7 +32,7 @@ def simulate_ar(
 
 def test_a_synthetic_pure_ar_series_recovers_its_coefficients() -> None:
     truth = {1: 0.4, 24: 0.3, 168: -0.2}
-    series = simulate_ar(0.5, truth, n=730 * 24)
+    series = simulate_ar(0.5, truth, n=CALIBRATION_HOURS)
 
     intercept, coefficients = fit_ar(series, LAGS)
 
@@ -62,7 +64,7 @@ def test_the_recursion_feeds_each_step_into_the_next() -> None:
 def test_the_forecast_is_24_levels_continuing_from_the_last_price() -> None:
     # A price that rises by exactly 1 every hour: the differences are all 1, so
     # every fitted model predicts differences of 1 and the levels carry on.
-    index = pd.date_range("2018-01-01", periods=730 * 24, freq="h")
+    index = pd.date_range("2018-01-01", periods=CALIBRATION_HOURS, freq="h")
     history = pd.Series(np.arange(len(index), dtype="float64"), index=index)
 
     forecast = AR168().forecast(history, index[-1].date())

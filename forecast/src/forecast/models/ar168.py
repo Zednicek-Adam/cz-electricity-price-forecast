@@ -24,8 +24,10 @@ import numpy as np
 import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 
+from forecast.grid import REPAIRED_PERIODS_PER_DAY
+
 LAGS = 168
-STEPS = 24
+CALIBRATION_DAYS = 730
 
 
 def fit_ar(series: np.ndarray, lags: int) -> tuple[float, np.ndarray]:
@@ -59,12 +61,15 @@ def diffinv(differences: np.ndarray, start: float) -> np.ndarray:
 
 class AR168:
     slug = "ar168"
-    version = "ar168-d1-lags168"
-    history_days = 730
+    version = f"ar168-d1-lags{LAGS}"
+    history_days = CALIBRATION_DAYS
 
     def forecast(self, history: pd.Series, target_day: date) -> list[float]:
-        levels = history.to_numpy(dtype="float64")
+        window = CALIBRATION_DAYS * REPAIRED_PERIODS_PER_DAY
+        levels = history.to_numpy(dtype="float64")[-window:]
         differences = np.diff(levels)
         intercept, coefficients = fit_ar(differences, LAGS)
-        predicted = recurse(differences, intercept, coefficients, STEPS)
+        predicted = recurse(
+            differences, intercept, coefficients, REPAIRED_PERIODS_PER_DAY
+        )
         return [float(x) for x in diffinv(predicted, levels[-1])[1:]]
