@@ -47,9 +47,12 @@ function accumulate(
   });
 }
 
-/** The running series for one model and one metric, aligned with `dates`. */
+/**
+ * The running series for one model and one sum-and-count metric, aligned with
+ * `dates`. rMAE is not one: it takes `runningRatio`, and the type keeps it out.
+ */
 export function running(
-  metric: Metric,
+  metric: Exclude<Metric, "rmae">,
   dates: DeliveryDate[],
   figures: DayFigure[],
 ): (number | null)[] {

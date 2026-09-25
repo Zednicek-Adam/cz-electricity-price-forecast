@@ -2,26 +2,36 @@
  * Published metrics and model comparisons for seam 3, chosen so every figure
  * the endpoints derive can be checked by hand.
  *
- * Three delivery days. `chronos2`'s second day carries 12 forecasts rather than
+ * Four delivery days. `chronos2`'s second day carries 12 forecasts rather than
  * 24, so a running figure that ignores `n_forecasts` gets it wrong. `ar168`'s
  * per-day rMAEs are 0.5, 0.5, 0.75, whose running mean (0.583) is not its
- * running rMAE (0.643): the trap ADR-0015 names.
+ * running rMAE (0.643): the trap ADR-0015 names. On the fourth day only the
+ * naïve has a figure, so the others' running values carry forward while their
+ * running rMAE still moves with the naïve's running MAE.
  */
 import type postgres from "postgres";
 
 import type { Metric, ModelSlug } from "../src/index.ts";
 
-export const METRIC_DAYS = ["2020-01-01", "2020-01-02", "2020-01-03"] as const;
+export const METRIC_DAYS = [
+  "2020-01-01",
+  "2020-01-02",
+  "2020-01-03",
+  "2020-01-04",
+] as const;
 
-type DayValues = Record<Metric, [number, number, number]>;
+const METRICS = ["mae", "rmse", "smape", "rmae"] as const satisfies Metric[];
 
-export const DAY_FIGURES: Record<ModelSlug, DayValues & { n: number[] }> = {
+/** Per-day figures, one entry per day from the first, and `n_forecasts`. */
+type DayValues = Record<Metric, number[]> & { n: number[] };
+
+export const DAY_FIGURES: Record<ModelSlug, DayValues> = {
   daylag: {
-    mae: [10, 20, 40],
-    rmse: [12, 24, 48],
-    smape: [20, 30, 40],
-    rmae: [1, 1, 1],
-    n: [24, 24, 24],
+    mae: [10, 20, 40, 30],
+    rmse: [12, 24, 48, 24],
+    smape: [20, 30, 40, 30],
+    rmae: [1, 1, 1, 1],
+    n: [24, 24, 24, 24],
   },
   ar168: {
     mae: [5, 10, 30],
@@ -41,9 +51,10 @@ export const DAY_FIGURES: Record<ModelSlug, DayValues & { n: number[] }> = {
 
 /** The whole-record rows the replay would publish for the same forecasts. */
 export const OVERALL: Record<ModelSlug, Record<Metric, number>> = {
-  daylag: { mae: 70 / 3, rmse: Math.sqrt(1008), smape: 30, rmae: 1 },
-  ar168: { mae: 15, rmse: Math.sqrt(492), smape: 20, rmae: 15 / (70 / 3) },
-  chronos2: { mae: 12, rmse: Math.sqrt(305), smape: 12, rmae: 12 / (70 / 3) },
+  // 2400 / 96; sqrt(3600 × 24 / 96); 2880 / 96.
+  daylag: { mae: 25, rmse: 30, smape: 30, rmae: 1 },
+  ar168: { mae: 15, rmse: Math.sqrt(492), smape: 20, rmae: 15 / 25 },
+  chronos2: { mae: 12, rmse: Math.sqrt(305), smape: 12, rmae: 12 / 25 },
 };
 
 /** DM of `chronos2` against `ar168` on every ordinal; against the naïve the
@@ -71,23 +82,23 @@ export function comparisons(): [
 
 export async function seedMetrics(sql: postgres.Sql): Promise<void> {
   for (const [model, values] of Object.entries(DAY_FIGURES)) {
-    for (const [i, day] of METRIC_DAYS.entries()) {
-      for (const metric of ["mae", "rmse", "smape", "rmae"] as const) {
+    for (const [i, n] of values.n.entries()) {
+      for (const metric of METRICS) {
         await sql`
           INSERT INTO published_metric VALUES (
-            ${model}, 'backtest', 'delivery_day', ${day}, ${metric},
-            ${values[metric][i] ?? 0}, ${values.n[i] ?? 0}, now()
+            ${model}, 'backtest', 'delivery_day', ${METRIC_DAYS[i] ?? ""},
+            ${metric}, ${values[metric][i] ?? 0}, ${n}, now()
           )
         `;
       }
     }
   }
   for (const [model, values] of Object.entries(OVERALL)) {
-    for (const [metric, value] of Object.entries(values)) {
+    for (const metric of METRICS) {
       await sql`
         INSERT INTO published_metric VALUES (
           ${model}, 'backtest', 'overall', ${METRIC_DAYS[0]}, ${metric},
-          ${value}, 60, now()
+          ${values[metric]}, 72, now()
         )
       `;
     }

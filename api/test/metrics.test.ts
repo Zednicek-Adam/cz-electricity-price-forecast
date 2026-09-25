@@ -44,12 +44,15 @@ describe("GET /api/running/:metric", () => {
       10,
       15,
       expect.closeTo(23.333333, 5),
+      25,
     ]);
-    expect(values(body, "ar168")).toEqual([5, 7.5, 15]);
+    // No ar168 figure on the fourth day: its running MAE carries forward.
+    expect(values(body, "ar168")).toEqual([5, 7.5, 15, 15]);
     // 24 periods at 4, then 12 at 12, then 24 at 20: 96/24, 240/36, 720/60.
     expect(values(body, "chronos2")).toEqual([
       4,
       expect.closeTo(6.666667, 5),
+      12,
       12,
     ]);
   });
@@ -59,27 +62,33 @@ describe("GET /api/running/:metric", () => {
 
     // ar168's per-day rMAEs are 0.5, 0.5, 0.75. Their running mean on the
     // third day would be 0.583; the ratio of running MAEs is 15 / 23.333.
+    // On the fourth day ar168 has no figure but the naïve does, so its
+    // running rMAE moves: 15 / 25.
     expect(values(body, "ar168")).toEqual([
       0.5,
       0.5,
       expect.closeTo(0.642857, 5),
+      0.6,
     ]);
     expect(values(body, "chronos2")).toEqual([
       0.4,
       expect.closeTo(0.444444, 5),
       expect.closeTo(0.514286, 5),
+      0.48,
     ]);
-    expect(values(body, "daylag")).toEqual([1, 1, 1]);
+    expect(values(body, "daylag")).toEqual([1, 1, 1, 1]);
   });
 
   test("running RMSE accumulates squared errors, not RMSEs", async () => {
     const body = await get<RunningMetricResponse>("/api/running/rmse");
 
-    // sqrt((12² + 24²) / 2) and sqrt((12² + 24² + 48²) / 3).
+    // sqrt((12² + 24²) / 2), sqrt((12² + 24² + 48²) / 3), and with 24² a
+    // fourth time, sqrt(3600 / 4).
     expect(values(body, "daylag")).toEqual([
       12,
       expect.closeTo(18.973666, 5),
       expect.closeTo(31.749016, 5),
+      30,
     ]);
   });
 
@@ -89,6 +98,7 @@ describe("GET /api/running/:metric", () => {
     expect(values(body, "chronos2")).toEqual([
       8,
       expect.closeTo(9.333333, 5),
+      12,
       12,
     ]);
   });
@@ -115,7 +125,7 @@ describe("GET /api/daily/:metric", () => {
     expect(body).toEqual<DailyMetricResponse>({
       model: "chronos2",
       metric: "mae",
-      deliveryDates: [...METRIC_DAYS],
+      deliveryDates: METRIC_DAYS.slice(0, 3),
       values: [4, 12, 20],
     });
   });
@@ -134,10 +144,14 @@ describe("GET /api/daily/:metric", () => {
     expect(body.values).not.toContain(999);
   });
 
-  test("rMAE per day is the stored ratio, noisy as it is", async () => {
-    const body = await get<DailyMetricResponse>("/api/daily/rmae");
+  test.each([
+    ["rmae", [0.4, 0.6, 0.5]],
+    ["rmse", [5, 15, 25]],
+    ["smape", [8, 12, 16]],
+  ] as const)("per-day %s is the stored figure", async (metric, expected) => {
+    const body = await get<DailyMetricResponse>(`/api/daily/${metric}`);
 
-    expect(body.values).toEqual([0.4, 0.6, 0.5]);
+    expect(body.values).toEqual(expected);
   });
 });
 

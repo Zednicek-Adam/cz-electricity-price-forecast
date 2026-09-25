@@ -151,7 +151,7 @@ function onTheGrid(
   return rows.map((r) => Number(r.price));
 }
 
-/** Every model's per-day published metric, grouped by model, date-ordered. */
+/** Every model's per-day published metric, grouped by model, in delivery-day order. */
 async function dayFigures(
   sql: Sql,
   metric: Metric,
@@ -284,7 +284,9 @@ app.get("/accuracy", async (c) => {
   const table = new Map<ModelSlug, AccuracyRow>();
   for (const row of rows) {
     const model = rosterModel(row.model);
-    if (!isMetric(row.metric)) continue;
+    if (!isMetric(row.metric)) {
+      throw new Error(`${row.metric} is not a published metric`);
+    }
     const entry = table.get(model) ?? {
       model,
       mae: null,
