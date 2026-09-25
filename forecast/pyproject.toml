@@ -1,0 +1,33 @@
+[project]
+name = "forecast"
+version = "0.1.0"
+description = "Loader, models and runner for the CZ day-ahead price forecast"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forecast"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+# Ruff governs this unit. `data/` and `analysis/` hold one-off scripts that
+# ran once and are kept for provenance, not code the gate has to defend.
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Pyflakes, pycodestyle, isort, pyupgrade, bugbear, comprehensions, simplify.
+select = ["F", "E", "W", "I", "UP", "B", "C4", "SIM"]
