@@ -1,0 +1,58 @@
+# The smoke replay (ADR-0010): every model over about five real delivery days,
+# end to end on a GitHub runner — load, weight download, forecasts, rebuild.
+# It is a wiring rehearsal, not a test. It catches what the pull request gate
+# cannot: the gate never downloads Chronos-2's weights and never writes to Neon.
+#
+# Run it by hand before a full replay, and rarely. Nothing schedules it and
+# nothing else triggers it.
+#
+# The default window straddles the 2024 fall-back day, so the 25-period day
+# goes through grid repair and every model on the way. A failure names its
+# stage, model and delivery day in the log and in an error annotation.
+name: smoke replay
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: First delivery day (YYYY-MM-DD)
+        required: true
+        default: "2024-10-25"
+      end:
+        description: Last delivery day (YYYY-MM-DD)
+        required: true
+        default: "2024-10-29"
+
+permissions:
+  contents: read
+
+# It writes to the same store as the replay, so never alongside one.
+concurrency:
+  group: replay
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: forecast
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: forecast
+          enable-cache: true
+      - run: uv sync --locked --no-dev --extra chronos
+      # As the Neon writer, like the replay. The five days are replaced, not
+      # added to, and every derived row is rebuilt whole at the end.
+      - name: Smoke replay of every model over ${{ inputs.start }} to ${{ inputs.end }}
+        env:
+          DATABASE_URL: ${{ secrets.NEON_WRITER }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: >
+          uv run --no-dev --extra chronos python -m forecast.replay
+          --models daylag,ar168,chronos2 --start "$START" --end "$END"

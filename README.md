@@ -254,6 +254,12 @@ The first full replay into Neon is driven from the author's machine as the
 writer role (ADR-0013), using the two commands above with `DATABASE_URL` set
 to the `NEON_WRITER` URL.
 
+Before a full replay, the `smoke replay` workflow runs every model over about
+five days (by default 2024-10-25 to 2024-10-29, across the fall-back day) on a
+GitHub runner, as the writer. It is a wiring rehearsal, run by hand and rarely.
+If a stage fails, the log and an error annotation name the stage, the model and
+the delivery day.
+
 Against Neon it runs from the `replay` workflow, which is `workflow_dispatch`
 only, as the writer role. Nothing runs it on a merge or on a schedule. The
 tests expect an empty local database, so replay into a separate one, or
