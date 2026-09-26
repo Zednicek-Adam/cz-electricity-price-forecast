@@ -3,7 +3,9 @@
 # production Neon, so it runs only when a person asks it to: `workflow_dispatch`
 # and nothing else. No schedule, and never on a merge.
 #
-# Chronos-2 is not on the roster yet (ADR-0013 phase 4).
+# With the `chronos` extra installed, `chronos2` is in the model set; its
+# weights are downloaded at the pinned revision on the runner. No Hugging Face
+# token is needed: `amazon/chronos-2` is public.
 name: replay
 
 on:
@@ -12,7 +14,7 @@ on:
       models:
         description: Comma-separated model slugs
         required: true
-        default: daylag,ar168
+        default: daylag,ar168,chronos2
       start:
         description: First delivery day (YYYY-MM-DD)
         required: true
@@ -44,7 +46,7 @@ jobs:
         with:
           working-directory: forecast
           enable-cache: true
-      - run: uv sync --locked --no-dev
+      - run: uv sync --locked --no-dev --extra chronos
       # As the Neon writer: it can append to the record and replace derived
       # rows, and nothing more (the grant migration).
       - name: Replay ${{ inputs.models }} over ${{ inputs.start }} to ${{ inputs.end }}
@@ -54,5 +56,5 @@ jobs:
           START: ${{ inputs.start }}
           END: ${{ inputs.end }}
         run: >
-          uv run --no-dev python -m forecast.replay
+          uv run --no-dev --extra chronos python -m forecast.replay
           --models "$MODELS" --start "$START" --end "$END"
