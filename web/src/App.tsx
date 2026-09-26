@@ -1,108 +1,140 @@
 /**
- * The dashboard (ADR-0007): one hero chart, the headline numbers beneath the
- * title, one metric selector governing the page, then the accuracy table.
+ * The dashboard (ADR-0007): one hero chart with two views switched in place,
+ * the headline numbers beneath the title, one metric selector governing the
+ * page, the day navigator, then the accuracy table and the Diebold–Mariano
+ * card.
  *
- * The page holds the state the controls share — the metric and the delivery
- * day — and fetches a view's payload once, when that payload is first needed.
- * Nothing polls and nothing refreshes (ADR-0010). There is no prose: every
- * date on screen is in 2020–2024, and the record says what it is.
+ * The page holds the state the controls share — the view, the metric, the
+ * delivery day and the model the DM card is about — and each view fetches its
+ * payload the first time it needs it. There is no prose: every date on screen
+ * is in 2020–2024, and the record says what it is.
  */
 import type {
   AccuracyResponse,
+  DailyMetricResponse,
   DeliveryDate,
   DeliveryDayResponse,
   Metric,
+  ModelSlug,
+  RunningMetricResponse,
 } from "@cz-epf/api";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import { getJson } from "./api.ts";
+import { AccuracyTable } from "./AccuracyTable.tsx";
+import { useJson } from "./api.ts";
+import { ComparisonCard } from "./ComparisonCard.tsx";
 import { DayChart } from "./DayChart.tsx";
+import { DayNavigator } from "./DayNavigator.tsx";
 import { Footer } from "./Footer.tsx";
 import { HeadlineNumbers } from "./HeadlineNumbers.tsx";
 import { MetricSelector } from "./MetricSelector.tsx";
-import {
-  formatMetric,
-  METRIC_PRESENTATION,
-  METRICS,
-  MODEL_LABELS,
-} from "./presentation.ts";
+import { OverTimeChart } from "./OverTimeChart.tsx";
+import { METRIC_PRESENTATION } from "./presentation.ts";
+import { FIRST_DAY, LAST_DAY } from "./record.ts";
+import { Ribbon } from "./Ribbon.tsx";
 
 /** The day the Day view opens on: the last day of the fixed backtest window
  * (ADR-0002), rather than a day picked for how it looks. */
-export const OPENING_DAY: DeliveryDate = "2024-12-31";
+export const OPENING_DAY: DeliveryDate = LAST_DAY;
 
-type Load<T> =
-  { state: "loading" } | { state: "ready"; data: T } | { state: "failed" };
-
-/** Fetch `path` once per distinct path; never again on its own. */
-function useJson<T>(path: string): Load<T> {
-  const [load, setLoad] = useState<{ path: string; load: Load<T> }>({
-    path,
-    load: { state: "loading" },
-  });
-  useEffect(() => {
-    let current = true;
-    getJson<T>(path)
-      .then(
-        (data) => current && setLoad({ path, load: { state: "ready", data } }),
-      )
-      .catch(() => current && setLoad({ path, load: { state: "failed" } }));
-    return () => {
-      current = false;
-    };
-  }, [path]);
-  return load.path === path ? load.load : { state: "loading" };
-}
+type View = "day" | "overTime";
 
 export function App() {
+  const [view, setView] = useState<View>("day");
   const [metric, setMetric] = useState<Metric>("mae");
-  const deliveryDate = OPENING_DAY;
-  const day = useJson<DeliveryDayResponse>(`/api/days/${deliveryDate}`);
+  const [deliveryDate, setDeliveryDate] = useState<DeliveryDate>(OPENING_DAY);
+  const [dmModel, setDmModel] = useState<ModelSlug>("chronos2");
+
+  const onDay = view === "day";
+  const day = useJson<DeliveryDayResponse>(
+    onDay ? `/api/days/${deliveryDate}` : null,
+  );
+  const daily = useJson<DailyMetricResponse>(
+    onDay ? `/api/daily/${metric}` : null,
+  );
+  const running = useJson<RunningMetricResponse>(
+    onDay ? null : `/api/running/${metric}`,
+  );
   const accuracy = useJson<AccuracyResponse>("/api/accuracy");
+  const models =
+    accuracy.state === "ready" ? accuracy.data.rows.map((r) => r.model) : [];
+
+  // The same models, reframed: the selected day in Day view, the whole record
+  // in Over time view.
+  const headline = onDay
+    ? day.state === "ready" && day.data.metrics
+    : accuracy.state === "ready" && accuracy.data.rows;
 
   return (
     <>
       <header>
         <h1>CZ day-ahead price forecast</h1>
-        <p className="caption">2020-01-01 – 2024-12-31 · EUR/MWh</p>
+        <p className="caption">
+          {FIRST_DAY} – {LAST_DAY} · EUR/MWh
+        </p>
       </header>
       <main>
         <section className="card hero" aria-label="Hero chart">
           <div className="hero-bar">
-            <h2>{deliveryDate}</h2>
-            <MetricSelector metric={metric} onChange={setMetric} />
+            <h2>
+              {onDay
+                ? deliveryDate
+                : `${METRIC_PRESENTATION[metric].label} over time`}
+            </h2>
+            <div className="controls">
+              <div className="toggle-group" role="group" aria-label="View">
+                <button
+                  type="button"
+                  aria-pressed={onDay}
+                  onClick={() => setView("day")}
+                >
+                  Day
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!onDay}
+                  onClick={() => setView("overTime")}
+                >
+                  Over time
+                </button>
+              </div>
+              <MetricSelector metric={metric} onChange={setMetric} />
+            </div>
           </div>
-          {day.state === "ready" && (
-            <>
-              <HeadlineNumbers metric={metric} figures={day.data.metrics} />
-              <DayChart day={day.data} />
-            </>
+          {headline && <HeadlineNumbers metric={metric} figures={headline} />}
+          {onDay && day.state === "ready" && <DayChart day={day.data} />}
+          {onDay && daily.state === "ready" && daily.data.values.length > 0 && (
+            <Ribbon
+              daily={daily.data}
+              selected={deliveryDate}
+              onPick={setDeliveryDate}
+            />
+          )}
+          {onDay && (
+            <DayNavigator
+              day={deliveryDate}
+              daily={daily.state === "ready" ? daily.data : null}
+              onPick={setDeliveryDate}
+            />
+          )}
+          {!onDay && running.state === "ready" && (
+            <OverTimeChart metric={metric} running={running.data} />
           )}
         </section>
         {accuracy.state === "ready" && (
           <section className="card" aria-label="Accuracy">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Model</th>
-                  {METRICS.map((m) => (
-                    <th key={m} scope="col">
-                      {METRIC_PRESENTATION[m].label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {accuracy.data.rows.map((row) => (
-                  <tr key={row.model}>
-                    <th scope="row">{MODEL_LABELS[row.model]}</th>
-                    {METRICS.map((m) => (
-                      <td key={m}>{formatMetric(m, row[m])}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <AccuracyTable accuracy={accuracy.data} />
+          </section>
+        )}
+        {models.length > 1 && (
+          <section className="card" aria-label="Diebold–Mariano">
+            <ComparisonCard
+              model={
+                models.includes(dmModel) ? dmModel : (models[0] as ModelSlug)
+              }
+              models={models}
+              onModel={setDmModel}
+            />
           </section>
         )}
       </main>
