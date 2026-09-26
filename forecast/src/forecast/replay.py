@@ -20,13 +20,21 @@ before it. The derived rows are rebuilt whole at the end **whether or not the
 day loop finished**, so the scoreboard always describes exactly the forecasts
 that are stored; then the failure is raised. Nothing is skipped quietly: a gap
 in the history a run needs stops the replay.
+
+A failure names where it happened. The replay runs in stages — `load`,
+`build <model>`, `forecast <model>`, `rebuild` — each logged as it starts and
+ends, and a failed stage raises `ReplayFailed` naming it, with the model and
+the delivery day when a forecast run was the cause. That is what makes the
+smoke replay (a wiring rehearsal on a GitHub runner) legible when it fails.
 """
 
 import argparse
 import logging
 import os
 import sys
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -42,6 +50,29 @@ log = logging.getLogger("forecast.replay")
 
 FIRST_REPLAYED_DAY = date(2020, 1, 1)
 LAST_REPLAYED_DAY = date(2024, 12, 31)
+
+
+class ReplayFailed(RuntimeError):
+    """A stage of the replay failed. Its message names the stage and the cause."""
+
+    def __init__(self, stage: str) -> None:
+        self.stage = stage
+        super().__init__(stage)
+
+    def __str__(self) -> str:
+        return f"stage {self.stage!r} failed: {self.__cause__}"
+
+
+@contextmanager
+def stage(name: str) -> Iterator[None]:
+    log.info("stage %s: started", name)
+    started = time.monotonic()
+    try:
+        yield
+    except Exception as error:
+        log.error("stage %s: failed: %s", name, error)
+        raise ReplayFailed(name) from error
+    log.info("stage %s: done in %.1f s", name, time.monotonic() - started)
 
 
 @dataclass(frozen=True)
@@ -77,27 +108,32 @@ def replay(
     days = delivery_days(start, end)
     code_version = code_version or current_code_version()
 
-    loaded = load_frozen_dataset(conn)
+    with stage("load"):
+        loaded = load_frozen_dataset(conn)
+        history = StoredHistory(conn)
     log.info(
-        "loaded the frozen dataset: %d observed, %d repaired prices new",
+        "the frozen dataset: %d observed, %d repaired prices new",
         loaded.observed_inserted,
         loaded.repaired_inserted,
     )
-    history = StoredHistory(conn)
     runs = 0
     try:
         for slug in models:
-            log.info("%s: %d delivery days from %s", slug, len(days), start)
-            runs += run_days(
-                conn,
-                build(slug),
-                days,
-                history,
-                run_type="backtest",
-                code_version=code_version,
-            )
+            with stage(f"build {slug}"):
+                model = build(slug)
+            with stage(f"forecast {slug}"):
+                log.info("%s: %d delivery days from %s", slug, len(days), start)
+                runs += run_days(
+                    conn,
+                    model,
+                    days,
+                    history,
+                    run_type="backtest",
+                    code_version=code_version,
+                )
     finally:
-        derived = rebuild_derived_rows(conn)
+        with stage("rebuild"):
+            derived = rebuild_derived_rows(conn)
         log.info(
             "rebuilt %d published metrics and %d model comparisons",
             derived.published_metrics,
@@ -127,7 +163,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Autocommit, so each forecast run's transaction is a real one and commits
     # as it finishes, rather than a savepoint inside one replay-long transaction.
     with psycopg.connect(url, autocommit=True) as conn:
-        result = replay(conn, models, args.start, args.end)
+        try:
+            result = replay(conn, models, args.start, args.end)
+        except ReplayFailed as failure:
+            if os.environ.get("GITHUB_ACTIONS"):
+                print(f"::error title=Replay failed::{failure}")
+            raise
     log.info("done: %d forecast runs", result.forecast_runs)
     return 0
 
