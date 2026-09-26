@@ -9,8 +9,8 @@ from datetime import date
 import psycopg
 import pytest
 
-from forecast.replay import replay
-from forecast.runner import HistoryGap
+from forecast.replay import ReplayFailed, replay
+from forecast.runner import ForecastRunFailed, HistoryGap
 
 START = date(2020, 1, 1)
 END = date(2020, 1, 3)
@@ -75,8 +75,16 @@ def test_a_run_that_cannot_be_made_stops_the_replay_and_the_scoreboard_follows(
     # AR-168 needs 730 days; the record opens 2018-01-01, so 2019-12-31 has one
     # day too few and the replay stops there, before writing any forecast. The
     # rebuild still runs, and the stale row goes with it.
-    with pytest.raises(HistoryGap):
+    with pytest.raises(ReplayFailed) as failure:
         replay(db, ["ar168"], date(2019, 12, 31), END, code_version="abc")
+
+    # The failure says where: which stage, which model, which day, and why.
+    assert str(failure.value).startswith(
+        "stage 'forecast ar168' failed: ar168 on 2019-12-31: forecast failed:"
+    )
+    run = failure.value.__cause__
+    assert isinstance(run, ForecastRunFailed)
+    assert isinstance(run.__cause__, HistoryGap)
 
     assert forecast_counts(db) == []
     assert db.execute("SELECT count(*) FROM published_metric").fetchone() == (0,)

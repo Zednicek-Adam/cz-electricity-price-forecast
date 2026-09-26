@@ -47,6 +47,18 @@ class InvalidForecast(ValueError):
     """A model returned something other than 24 finite numbers."""
 
 
+class ForecastRunFailed(RuntimeError):
+    """A forecast run in the day loop failed; says which, and at which step."""
+
+    def __init__(self, model: str, day: date, step: str) -> None:
+        self.model, self.day, self.step = model, day, step
+        super().__init__(f"{model} on {day}: {step} failed")
+
+    def __str__(self) -> str:
+        cause = f": {self.__cause__}" if self.__cause__ else ""
+        return f"{self.model} on {self.day}: {self.step} failed{cause}"
+
+
 @dataclass(frozen=True)
 class Run:
     model: str
@@ -138,11 +150,18 @@ def run_days(
     code_version: str,
 ) -> int:
     """The day loop: one forecast run per delivery day, each written as it
-    finishes. The first run that cannot be made raises and stops the loop."""
+    finishes. The first run that cannot be made raises `ForecastRunFailed`,
+    naming the model, the day and the step, and stops the loop."""
     runs = 0
     for day in days:
-        run = run_forecast(model, day, provider)
-        write_run(conn, run, run_type=run_type, code_version=code_version)
+        try:
+            run = run_forecast(model, day, provider)
+        except Exception as error:
+            raise ForecastRunFailed(model.slug, day, "forecast") from error
+        try:
+            write_run(conn, run, run_type=run_type, code_version=code_version)
+        except Exception as error:
+            raise ForecastRunFailed(model.slug, day, "write") from error
         runs += 1
         if (day.month, day.day) == (1, 1):
             log.info("%s: reached %s", model.slug, day)
