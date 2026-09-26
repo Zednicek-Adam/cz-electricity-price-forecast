@@ -5,19 +5,88 @@
 A public dashboard that forecasts day-ahead electricity prices for the Czech
 bidding zone (`BZN|CZ`) and scores its own forecasts against the market outcome.
 
-**This is a backtest.** Every forecast on the dashboard was produced after the
-fact, over delivery days from 2020-01-01 to 2024-12-31 whose prices were
-already known, by models that could see only the prices published before each
-day they forecast. Nothing on the dashboard forecasts tomorrow.
+**The dashboard** is deployed from `main` to Cloudflare. It has not been
+deployed yet: its address goes here after the first deploy.
 
-**rMAE here is not comparable to published electricity-price-forecasting work
-or to the figures in the thesis this project builds on**, because it is
-measured against a day-lag naïve (the same hour on the previous day) rather
-than the literature's seasonal naïve.
+**This is a backtest, presented as one.** Every forecast on the dashboard was
+produced after the fact, over the 1,827 delivery days from 2020-01-01 to
+2024-12-31, whose prices were already known, by models that could see only the
+prices published before each day they forecast. Nothing on the dashboard
+forecasts tomorrow, and the dashboard says so the only way it can without a
+banner: every date on it is in 2020–2024.
+
+**rMAE here is not comparable to published electricity-price-forecasting work,
+to the thesis this project builds on, or to figures from any other test
+window.** It is measured against a day-lag naïve (the same hour on the previous
+day) rather than the literature's seasonal naïve, and over this record only.
 
 Prices are in EUR/MWh throughout, because that is how the market publishes
 them. What every figure means, and how it is computed, is in
 [Reading the figures](docs/reading-the-figures.md).
+
+## What the record shows
+
+Three models over the whole backtest window, every delivery period counted:
+
+| Model | MAE | RMSE | SMAPE | rMAE |
+|---|---|---|---|---|
+| Chronos-2 | 16.6 | 29.0 | 20.5 | 0.638 |
+| AR-168 | 20.1 | 34.2 | 23.8 | 0.771 |
+| Naïve | 26.1 | 44.8 | 32.0 | 1.000 |
+
+The headline model is **Chronos-2, a pretrained foundation model put into
+production here, not a model invented here**. It is Amazon's `amazon/chronos-2`,
+called zero-shot on the price history alone, pinned to one exact revision so
+the record cannot move under it. What this project built is the system around
+it: a way of producing and scoring forecasts that cannot see the future, and a
+scoreboard a reader can check.
+
+Most of the error is 2022. The naïve's MAE runs 7.8, 21.8, 52.6, 23.2 and 25.1
+EUR/MWh across 2020 to 2024, and Chronos-2's runs 4.6, 14.1, 33.4, 14.6 and 16.5,
+because error follows the price level, and in the energy crisis the level
+more than doubled. The
+ratio does not follow it: Chronos-2's rMAE stays between 0.59 and 0.66 in every
+year. The dashboard's Over time view shows the same thing as a shape: each
+model's running MAE climbs through 2022 and then settles.
+
+A single day is much noisier than the record. Chronos-2's rMAE for one delivery
+day ranges from 0.07 to 3.73 across the 1,827 days: on a calm day the naïve's
+error is close to zero, and the ratio means little. The whole-record figure is
+the one to read.
+
+These figures are from the full replay of 2026-09-26, run from this repository
+and checked with `forecast.verify`. They match the thesis's own Chronos-2
+result, MAE 16.64 and rMAE 0.638, which is a check on the whole pipeline rather
+than a target it was tuned to.
+
+## Why the figures can be checked rather than trusted
+
+Honest forecast evaluation is easy to claim, so here is how this one is built
+to be checkable.
+
+- **A model cannot see the future, by construction.** Each forecast is one call,
+  `model.forecast(history, target_day)`. The model receives the price history
+  as a value, cut at the start of the day it is forecasting, and holds no
+  database connection, no data source and no clock (ADR-0002). A test checks
+  that for every model, including that rewriting every stored price from the
+  target day onward changes no forecast. It runs on every pull request, except
+  for Chronos-2, whose weights the gate does not download; its checks run by
+  hand before a replay.
+- **The benchmark sits in the table.** The day-lag naïve is a model like the
+  others and has its own row, at exactly rMAE 1.000. That row is what tells a
+  reader what the ratio means.
+- **No year is excluded.** 2022 is in every figure, and no headline number is
+  computed over a shortened window (ADR-0002, ADR-0006).
+- **Every day is reachable.** All 1,827 days can be opened on the dashboard,
+  the worst included: a "worst day" button finds it.
+- **The headline model was fixed before any result was read.** Chronos-2 leads
+  because it was chosen to lead, not because it won (ADR-0003).
+- **The scoreboard cannot describe forecasts that no longer exist.** Every
+  accuracy figure is rebuilt from the stored forecasts, all at once, whenever
+  forecasts are written (ADR-0010). Each forecast records the model version and
+  the git commit that produced it.
+- **The data is the market's own.** The observed prices are ENTSO-E's
+  publication, committed unaltered, and every figure is EUR/MWh as cleared.
 
 ## Data, attribution and take-down
 
