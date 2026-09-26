@@ -10,6 +10,12 @@ dependencies = [
     "scipy>=1.18.1",
 ]
 
+[project.optional-dependencies]
+chronos = [
+    "chronos-forecasting>=2.0",
+    "torch>=2.14.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -25,7 +31,13 @@ packages = ["src/forecast"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# Chronos-2's tests download its weights and need the `chronos` extra, so the
+# default run, and so the pull request gate, leaves them out. Run them with
+#   uv run --extra chronos pytest -m chronos
+addopts = "-q -m 'not chronos'"
+markers = [
+    "chronos: builds Chronos-2, which downloads its weights; not in the gate",
+]
 
 # Ruff governs this unit. `data/` and `analysis/` hold one-off scripts that
 # ran once and are kept for provenance, not code the gate has to defend.
@@ -36,3 +48,13 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 # Pyflakes, pycodestyle, isort, pyupgrade, bugbear, comprehensions, simplify.
 select = ["F", "E", "W", "I", "UP", "B", "C4", "SIM"]
+
+# Chronos-2's runtime is optional: `uv sync --extra chronos`. The pull request
+# gate never installs it, and never downloads the model (ADR-0010).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
