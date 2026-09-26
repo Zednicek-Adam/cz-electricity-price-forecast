@@ -37,12 +37,12 @@ import psycopg
 import pytest
 
 import forecast.models
+from conftest import built, roster
 from forecast.history import StoredHistory
 from forecast.loader import load_frozen_dataset
-from forecast.models import ROSTER, build
 from forecast.runner import run_forecast
 
-SLUGS = sorted(ROSTER)
+SLUGS = roster()
 
 # Modules that are, or that lead to, a store, a provider, a clock or the network.
 FORBIDDEN_MODULES = (
@@ -122,14 +122,14 @@ def model_modules() -> list[types.ModuleType]:
 
 @pytest.mark.parametrize("slug", SLUGS)
 def test_forecast_takes_history_and_a_target_day_and_nothing_else(slug: str) -> None:
-    parameters = inspect.signature(build(slug).forecast).parameters
+    parameters = inspect.signature(built(slug).forecast).parameters
 
     assert list(parameters) == ["history", "target_day"]
 
 
 @pytest.mark.parametrize("slug", SLUGS)
 def test_a_model_holds_no_store_handle_provider_or_clock(slug: str) -> None:
-    for obj in reachable(vars(build(slug))):
+    for obj in reachable(vars(built(slug))):
         assert not isinstance(obj, types.ModuleType), obj
         assert not from_store(obj), obj
         assert not is_clock(obj), obj
@@ -139,7 +139,7 @@ def test_a_model_holds_no_store_handle_provider_or_clock(slug: str) -> None:
 def test_forecast_runs_with_the_network_and_the_clocks_sealed(
     slug: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    model = build(slug)
+    model = built(slug)
 
     def sealed(*args: object, **kwargs: object) -> None:
         raise AssertionError("a model reached outside its argument")
@@ -196,7 +196,7 @@ def test_rewriting_the_store_from_the_target_day_onward_changes_no_forecast(
     frozen_store: psycopg.Connection, slug: str
 ) -> None:
     target = date(2024, 6, 1)
-    before = run_forecast(build(slug), target, StoredHistory(frozen_store))
+    before = run_forecast(built(slug), target, StoredHistory(frozen_store))
 
     with frozen_store.transaction(force_rollback=True):
         frozen_store.execute(
@@ -204,6 +204,6 @@ def test_rewriting_the_store_from_the_target_day_onward_changes_no_forecast(
             " WHERE delivery_date >= %s",
             (target,),
         )
-        after = run_forecast(build(slug), target, StoredHistory(frozen_store))
+        after = run_forecast(built(slug), target, StoredHistory(frozen_store))
 
     assert after == before

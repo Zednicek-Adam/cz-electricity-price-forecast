@@ -11,10 +11,10 @@ from functools import cache
 import pandas as pd
 import pytest
 
+from conftest import built, roster
 from forecast.grid import market_label, repair_grid
 from forecast.loader import read_frozen_dataset
 from forecast.model import history_series
-from forecast.models import ROSTER, build
 from forecast.models.daylag import DayLagNaive
 from forecast.runner import run_forecast
 
@@ -44,7 +44,7 @@ def test_the_naive_is_yesterdays_prices_to_the_value() -> None:
     assert forecast[19] == 871.0  # the record's highest, 17:00Z = 19:00 CEST
 
 
-@pytest.mark.parametrize("slug", sorted(ROSTER))
+@pytest.mark.parametrize("slug", roster())
 @pytest.mark.parametrize(
     "target_day",
     [
@@ -57,7 +57,7 @@ def test_the_naive_is_yesterdays_prices_to_the_value() -> None:
     ],
 )
 def test_every_model_returns_24_finite_floats(slug: str, target_day: date) -> None:
-    run = run_forecast(build(slug), target_day, in_memory)
+    run = run_forecast(built(slug), target_day, in_memory)
 
     assert len(run.prices) == 24
     assert all(isinstance(p, float) for p in run.prices)

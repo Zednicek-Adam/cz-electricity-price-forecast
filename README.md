@@ -48,8 +48,12 @@ or an issue on this repository.
 Three models, all univariate, on the roster in `CONTEXT.md` (ADR-0003):
 
 - **Chronos-2** (`chronos2`), Amazon's pretrained forecasting model, used
-  zero-shot. It is the headline model, chosen before any result was read. It
-  joins in phase 4.
+  zero-shot on the price history alone, CPU and float32, with an 8,192-hour
+  context. It is the headline model, chosen before any result was read. Its
+  weights are `amazon/chronos-2` at the pinned revision
+  `29ec3766d36d6f73f0696f85560a422f50e8498c`, downloaded at run time.
+  Building it needs `uv sync --extra chronos`, and it never runs in the pull
+  request gate.
 - **AR-168** (`ar168`), an autoregression on a week of hourly lags of the
   differenced price. A hand-written port of `ar_lm_predict` from the author's
   diploma thesis repository,
@@ -170,6 +174,14 @@ version of the Worker, not deployed, at a public
 summary. It reads production Neon as the reader role, which cannot write. The
 preview is not a required check. Until Cloudflare is provisioned (#38) the job
 skips with a warning.
+
+Chronos-2's tests download its weights, so the gate leaves them out (they
+carry the `chronos` marker, deselected by default). Run them by hand before a
+replay that includes it:
+
+```sh
+cd forecast && uv run --extra chronos pytest -m chronos
+```
 
 Ruff's scope is the `forecast/` unit. `data/` and `analysis/` hold one-off
 scripts that ran once and are kept for their provenance, and they are outside

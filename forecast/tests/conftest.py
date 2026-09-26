@@ -11,11 +11,30 @@ the migrations applied by the pinned `dbmate` container:
 
 import os
 from collections.abc import Iterator
+from functools import cache
 
 import psycopg
 import pytest
 
+from forecast.model import Model
+from forecast.models import DOWNLOADED, ROSTER, build
+
 LOCAL_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/czepf"
+
+
+def roster() -> list:
+    """Every model on the roster as a test parameter. Chronos-2 carries the
+    `chronos` marker, so the default run, the gate's, never builds it."""
+    return [
+        pytest.param(slug, marks=pytest.mark.chronos) if slug in DOWNLOADED else slug
+        for slug in sorted(ROSTER)
+    ]
+
+
+@cache
+def built(slug: str) -> Model:
+    """A model built once per test session: Chronos-2 takes seconds to load."""
+    return build(slug)
 
 
 @pytest.fixture(scope="session")
