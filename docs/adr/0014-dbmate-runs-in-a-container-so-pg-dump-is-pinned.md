@@ -14,7 +14,7 @@ a developer's client happens to differ from CI's, for reasons that have nothing
 to do with the migration under review.
 
 **`dbmate` therefore runs as a one-shot container**,
-`ghcr.io/amacneil/dbmate:2.35.1`, pinned to the patch beside `postgres:17.11`.
+`ghcr.io/amacneil/dbmate:2.35.1`, pinned to the patch beside `postgres:18.6`.
 Both images are pinned for the same reason, and bumping either is a commit that
 also regenerates the schema file. It is a `docker compose run --rm` under a
 `tools` profile, not a service that stays up: `docker compose up -d db` does not
@@ -40,7 +40,7 @@ gate somewhere that looks unrelated. The README's "no local Postgres client"
 prerequisite makes that the *default* state of a fresh clone, not an edge case.
 
 **A `pg_dump` shim on `PATH`, forwarding into the `db` container.** The
-`postgres:17.11` image already carries a `pg_dump` matching its own server, so a
+`postgres:18.6` image already carries a `pg_dump` matching its own server, so a
 small script that execs `docker compose exec -T db pg_dump` would pin the client
 with one image and leave `dbmate` native. Genuinely tempting, and rejected on
 cost rather than principle: `dbmate` offers no way to configure the `pg_dump`
@@ -50,7 +50,7 @@ Windows, and carrying the same silent-skip failure the option above does the
 moment the shim is absent. Per-command latency is no better either, since it
 still crosses into a container for every dump.
 
-**`dbmate` run inside the `postgres:17.11` image.** Would pin `pg_dump` to
+**`dbmate` run inside the `postgres:18.6` image.** Would pin `pg_dump` to
 exactly the server version and add no second image. Rejected because getting the
 binary in there means either a `Dockerfile` — trading a pulled image for a built
 one, which is worse — or downloading it at run time, which un-pins the tool the
@@ -89,13 +89,15 @@ made, which would leave this ADR buying nothing. Issue #39 landed the compose
 file; the workflow that consumes it does not exist yet, and this constraint is
 the one thing it must honour.
 
-**The dump is currently written by a newer client than the server.** The pinned
-image carries `pg_dump` 18, and `db/schema.sql` records "Dumped from database
-version 17.11 / Dumped by pg_dump version 18.6". That is supported and stable
-while both tags are pinned, but the two versions are pinned *independently* — a
-`dbmate` patch bump that ships a different client rewrites the schema file on its
-own. That is a visible red gate rather than a silent corruption, which is the
-right failure, but it means image bumps are schema commits.
+**Client and server are pinned independently.** The `dbmate` image carries
+`pg_dump` 18.6, and since the server image moved to `postgres:18.6` to match
+Neon (issue #81; Neon runs 18.6), `db/schema.sql` records the same version on
+both lines. Until then it was written by a newer client than the server, 17.11,
+which is supported but was a local database a major version behind production.
+Because the two tags are still pinned *independently*, a `dbmate` patch bump
+that ships a different client rewrites the schema file on its own. That is a
+visible red gate rather than a silent corruption, which is the right failure,
+but it means image bumps are schema commits.
 
 **`db/schema.sql` is checked out LF on every platform** (`.gitattributes`), since
 it is generated inside a container that writes LF and compared byte for byte
