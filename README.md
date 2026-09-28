@@ -5,8 +5,8 @@
 A public dashboard that forecasts day-ahead electricity prices for the Czech
 bidding zone (`BZN|CZ`) and scores its own forecasts against the market outcome.
 
-**The dashboard** is deployed from `main` to Cloudflare. It has not been
-deployed yet: its address goes here after the first deploy.
+**The dashboard:** <https://cz-epf.adam-zednicek123.workers.dev>, deployed
+from `main` to Cloudflare on every merge.
 
 **This is a backtest, presented as one.** Every forecast on the dashboard was
 produced after the fact, over the 1,827 delivery days from 2020-01-01 to
@@ -54,8 +54,9 @@ day ranges from 0.07 to 3.73 across the 1,827 days: on a calm day the naïve's
 error is close to zero, and the ratio means little. The whole-record figure is
 the one to read.
 
-These figures are from the full replay of 2026-09-26, run from this repository
-and checked with `forecast.verify`. They match the thesis's own Chronos-2
+These figures are what the dashboard shows: the production store as written by
+the `replay` workflow on 2026-09-28 and checked with `forecast.verify`. They
+match the thesis's own Chronos-2
 result, MAE 16.64 and rMAE 0.638, which is a check on the whole pipeline rather
 than a target it was tuned to.
 
