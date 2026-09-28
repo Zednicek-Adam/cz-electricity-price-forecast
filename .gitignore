@@ -15,3 +15,6 @@ dist/
 
 # Wrangler's local build and state.
 .wrangler/
+
+# Claude Code agent worktrees: local checkouts, never part of the repository.
+.claude/worktrees/
