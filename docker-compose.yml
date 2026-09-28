@@ -14,7 +14,7 @@ services:
     # floating tag would make the gate's "the regenerated schema matches the
     # committed one" check fail on an unrelated Postgres release. Bumping this
     # is a commit that also regenerates the schema file.
-    image: postgres:17.11
+    image: postgres:18.6
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -22,7 +22,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db-data:/var/lib/postgresql/data
+      # From 18 the image keeps its data under a versioned directory inside
+      # /var/lib/postgresql, so the volume mounts there. The volume is named
+      # for the major version: a 17 data directory cannot be opened by 18.
+      - db-data-18:/var/lib/postgresql
       # Creates `app_writer` and `app_reader` when the volume is first
       # initialised, so the grant migration applies here as it does on Neon.
       - ./db/local-roles.sql:/docker-entrypoint-initdb.d/local-roles.sql:ro
@@ -47,4 +50,4 @@ services:
       - ./db:/db
 
 volumes:
-  db-data:
+  db-data-18:
