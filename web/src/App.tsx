@@ -6,8 +6,9 @@
  *
  * The page holds the state the controls share — the view, the metric, the
  * delivery day and the model the DM card is about — and each view fetches its
- * payload the first time it needs it. There is no prose: every date on screen
- * is in 2020–2024, and the record says what it is.
+ * payload the first time it needs it. There is no prose: the record says what
+ * it is. The two exceptions are claims the record cannot make by itself: the
+ * pending day has no price yet, and a daily run that has stopped (ADR-0012).
  */
 import type {
   AccuracyResponse,
@@ -16,8 +17,9 @@ import type {
   DeliveryDayResponse,
   Metric,
   ModelSlug,
+  RecordResponse,
   RunningMetricResponse,
-} from "@cz-epf/api";
+} from "./types.ts";
 import { useState } from "react";
 
 import { AccuracyTable } from "./AccuracyTable.tsx";
@@ -30,32 +32,34 @@ import { HeadlineNumbers } from "./HeadlineNumbers.tsx";
 import { MetricSelector } from "./MetricSelector.tsx";
 import { OverTimeChart } from "./OverTimeChart.tsx";
 import { METRIC_PRESENTATION } from "./presentation.ts";
-import { FIRST_DAY, LAST_DAY } from "./record.ts";
+import { isStale, todayInPrague } from "./record.ts";
 import { Ribbon } from "./Ribbon.tsx";
-
-/** The day the Day view opens on: the last day of the fixed backtest window
- * (ADR-0002), rather than a day picked for how it looks. */
-export const OPENING_DAY: DeliveryDate = LAST_DAY;
 
 type View = "day" | "overTime";
 
 export function App() {
   const [view, setView] = useState<View>("day");
   const [metric, setMetric] = useState<Metric>("mae");
-  const [deliveryDate, setDeliveryDate] = useState<DeliveryDate>(OPENING_DAY);
+  const [picked, setPicked] = useState<DeliveryDate | null>(null);
   const [dmModel, setDmModel] = useState<ModelSlug>("chronos2");
+
+  const record = useJson<RecordResponse>("/data/record.json");
+  const extent = record.state === "ready" ? record.data : null;
+  // The Day view opens on the record's last day, the pending forecast while
+  // there is one, rather than on a day picked for how it looks.
+  const deliveryDate = picked ?? extent?.last ?? null;
 
   const onDay = view === "day";
   const day = useJson<DeliveryDayResponse>(
-    onDay ? `/api/days/${deliveryDate}` : null,
+    onDay && deliveryDate ? `/data/days/${deliveryDate}.json` : null,
   );
   const daily = useJson<DailyMetricResponse>(
-    onDay ? `/api/daily/${metric}` : null,
+    onDay ? `/data/daily/${metric}.json` : null,
   );
   const running = useJson<RunningMetricResponse>(
-    onDay ? null : `/api/running/${metric}`,
+    onDay ? null : `/data/running/${metric}.json`,
   );
-  const accuracy = useJson<AccuracyResponse>("/api/accuracy");
+  const accuracy = useJson<AccuracyResponse>("/data/accuracy.json");
   const models =
     accuracy.state === "ready" ? accuracy.data.rows.map((r) => r.model) : [];
 
@@ -64,14 +68,23 @@ export function App() {
   const headline = onDay
     ? day.state === "ready" && day.data.metrics
     : accuracy.state === "ready" && accuracy.data.rows;
+  const unpublished = onDay && day.state === "ready" && !day.data.observed;
 
   return (
     <>
       <header>
         <h1>CZ day-ahead price forecast</h1>
-        <p className="caption">
-          {FIRST_DAY} – {LAST_DAY} · EUR/MWh
-        </p>
+        {extent && (
+          <p className="caption">
+            {extent.first} – {extent.last} · EUR/MWh
+          </p>
+        )}
+        {extent && isStale(extent, todayInPrague()) && (
+          <p className="stale" role="status">
+            The daily run has stopped: the latest forecast is for{" "}
+            {extent.pending}.
+          </p>
+        )}
       </header>
       <main>
         <section className="card hero" aria-label="Hero chart">
@@ -101,20 +114,30 @@ export function App() {
               <MetricSelector metric={metric} onChange={setMetric} />
             </div>
           </div>
-          {headline && <HeadlineNumbers metric={metric} figures={headline} />}
-          {onDay && day.state === "ready" && <DayChart day={day.data} />}
-          {onDay && daily.state === "ready" && daily.data.values.length > 0 && (
-            <Ribbon
-              daily={daily.data}
-              selected={deliveryDate}
-              onPick={setDeliveryDate}
-            />
+          {unpublished ? (
+            <p className="note">
+              Not published yet: the price clears the day before delivery.
+            </p>
+          ) : (
+            headline && <HeadlineNumbers metric={metric} figures={headline} />
           )}
-          {onDay && (
+          {onDay && day.state === "ready" && <DayChart day={day.data} />}
+          {onDay &&
+            deliveryDate &&
+            daily.state === "ready" &&
+            daily.data.values.length > 0 && (
+              <Ribbon
+                daily={daily.data}
+                selected={deliveryDate}
+                onPick={setPicked}
+              />
+            )}
+          {onDay && extent && deliveryDate && (
             <DayNavigator
+              record={extent}
               day={deliveryDate}
               daily={daily.state === "ready" ? daily.data : null}
-              onPick={setDeliveryDate}
+              onPick={setPicked}
             />
           )}
           {!onDay && running.state === "ready" && (

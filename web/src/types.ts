@@ -1,14 +1,14 @@
 /**
- * The API/client contract. `web/` imports these types from `@cz-epf/api`
- * rather than restating what the API returns, so there is nothing to generate
- * and nothing to keep in step by hand (ADR-0004). This module holds types only,
- * so importing it pulls no server code into the client.
+ * The shapes of the files under `/data/`, which `forecast.export` writes at
+ * deploy time (ADR-0016). The export is the only producer and the dashboard
+ * the only reader; the two are kept in step by hand, and the seam-4 fixture
+ * (`fixture.ts`) is typed by this module.
  *
  * Every price is EUR/MWh, as the market publishes it, at every layer: nothing
  * here or behind it converts a currency (ADR-0008).
  */
 
-/** The three models of ADR-0003, as they are written on a stored row. */
+/** The three models of ADR-0003, as the record names them. */
 export type ModelSlug = "chronos2" | "ar168" | "daylag";
 
 /** A delivery day, `YYYY-MM-DD`: a calendar day in `Europe/Prague`. */
@@ -22,19 +22,34 @@ export interface ModelForecast {
 }
 
 /**
- * `GET /api/days/:deliveryDate` — the Day view: the repaired observed price and every
- * model's forecasts over the 24 period ordinals of one delivery day. A
- * daylight-saving day is on the repaired grid like any other (ADR-0006).
+ * `/data/record.json` — the record's extent: every delivery day from `first`
+ * to `last` has a Day view file. `pending` is the one delivery day with
+ * forecasts and no published price yet, or null (CONTEXT.md).
+ */
+export interface RecordResponse {
+  first: DeliveryDate;
+  last: DeliveryDate;
+  pending: DeliveryDate | null;
+}
+
+/**
+ * `/data/days/<delivery date>.json` — the Day view: the repaired observed
+ * price and every model's forecasts over the 24 period ordinals of one
+ * delivery day. A daylight-saving day is on the repaired grid like any other
+ * (ADR-0006).
  */
 export interface DeliveryDayResponse {
   deliveryDate: DeliveryDate;
-  /** Repaired observed prices, EUR/MWh, indexed by period ordinal minus one. */
-  observed: number[];
+  /**
+   * Repaired observed prices, EUR/MWh, indexed by period ordinal minus one;
+   * null on the pending day, whose price is not published yet.
+   */
+  observed: number[] | null;
   forecasts: ModelForecast[];
   /**
-   * Each model's published metrics for this delivery day, as stored: the
-   * headline numbers of the Day view. Read, never computed here or in the
-   * client (ADR-0004).
+   * Each model's published metrics for this delivery day: the headline
+   * numbers of the Day view. Read, never computed in the client (ADR-0004).
+   * Empty on the pending day.
    */
   metrics: ModelMetrics[];
 }
@@ -49,27 +64,7 @@ export interface ModelMetrics {
   rmae: number | null;
 }
 
-/** The first and last delivery days the backtest covers. */
-export interface RecordExtent {
-  first: DeliveryDate;
-  last: DeliveryDate;
-}
-
-/** 404: the delivery day is not one the record holds. */
-export interface NotInRecordResponse {
-  error: "not_in_record";
-  deliveryDate: DeliveryDate;
-  /** The record's extent, or null while the store holds no forecasts. */
-  record: RecordExtent | null;
-}
-
-/** 400: the request itself is malformed. */
-export interface BadRequestResponse {
-  error: "bad_request";
-  message: string;
-}
-
-/** The four published metrics, as stored and as the metric selector names them. */
+/** The four published metrics, as the metric selector names them. */
 export type Metric = "mae" | "rmse" | "smape" | "rmae";
 
 /** One model's figures, aligned with a response's `deliveryDates`. */
@@ -80,11 +75,10 @@ export interface MetricSeries {
 }
 
 /**
- * `GET /api/running/:metric` — the Over time view: the running metric for
- * every model across every delivery day of the record (ADR-0007). Derived in
- * the Worker from the per-day published metrics (ADR-0015): a cumulative sum
- * over a cumulative count of delivery periods, and for rMAE the ratio of two
- * running MAEs, never a running mean of per-day ratios.
+ * `/data/running/<metric>.json` — the Over time view: the running metric for
+ * every model across every scored delivery day of the record (ADR-0007): a
+ * cumulative sum over a cumulative count of delivery periods, and for rMAE the
+ * ratio of two running MAEs, never a running mean of per-day ratios.
  */
 export interface RunningMetricResponse {
   metric: Metric;
@@ -93,8 +87,8 @@ export interface RunningMetricResponse {
 }
 
 /**
- * `GET /api/daily/:metric` — the ribbon, and the worst / best / random day:
- * the headline model's published metric on each delivery day, as stored. A
+ * `/data/daily/<metric>.json` — the ribbon, and the worst / best / random day:
+ * the headline model's published metric on each scored delivery day. A
  * different series from the running one.
  */
 export interface DailyMetricResponse {
@@ -108,7 +102,7 @@ export interface DailyMetricResponse {
  * The day-lag naïve's own row reads rMAE exactly 1. */
 export type AccuracyRow = ModelMetrics;
 
-/** `GET /api/accuracy` — the accuracy table: every model × four metrics. */
+/** `/data/accuracy.json` — the accuracy table: every model × four metrics. */
 export interface AccuracyResponse {
   rows: AccuracyRow[];
 }
@@ -126,7 +120,7 @@ export interface Opponent {
 }
 
 /**
- * `GET /api/comparisons/:model` — the Diebold-Mariano card: a model against
+ * `/data/comparisons/<model>.json` — the Diebold-Mariano card: a model against
  * each opponent, by period ordinal. The tests are on absolute loss, so they
  * rank what MAE ranks, whatever metric the page shows (ADR-0005).
  */

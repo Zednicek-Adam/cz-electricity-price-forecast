@@ -1,10 +1,10 @@
-# The pull request gate (ADR-0010): three parallel jobs behind one required
+# The pull request gate (ADR-0010): two parallel jobs behind one required
 # aggregator. `all-green` is the only required check, so a merge is gated on one
 # status rather than on remembering which jobs matter.
 #
 # No `paths` or `paths-ignore` filter, anywhere. A filtered job that is also a
 # required check stays pending forever and blocks the merge, and every job here
-# takes seconds.
+# takes a minute or two. Nothing needs Docker or a database (ADR-0016).
 name: gate
 
 on:
@@ -32,13 +32,10 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      # The persistence tests run against the same compose Postgres as the db
-      # job, migrated the same way: there is no mocked database anywhere.
-      - run: docker compose up -d --wait db
-        working-directory: .
-      - run: docker compose run --rm dbmate up
-        working-directory: .
       - run: uv run pytest
+      # The checks the deploy runs before it builds, on the records as this
+      # pull request leaves them.
+      - run: uv run python -m forecast.export
 
   typescript:
     runs-on: ubuntu-latest
@@ -53,70 +50,36 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
-      # The API's tests run against the same compose Postgres as the db job,
-      # and its row types are generated from it (ADR-0004): regenerate them and
-      # fail if the committed file no longer matches the migrations.
-      - run: docker compose up -d --wait db
-      - run: docker compose run --rm dbmate up
-      - run: pnpm --filter @cz-epf/api db:types
-      - name: api/src/db.generated.ts matches the migrated database
-        run: git diff --exit-code api/src/db.generated.ts
       - run: pnpm test
 
-  # The Postgres here is the `db` service of docker-compose.yml, not a copy of
-  # it: the images are pinned in that one file, so CI and a laptop cannot drift
-  # apart, and `dbmate` runs from its pinned container because the schema dump
-  # records both `pg_dump`'s version and the server's (ADR-0014). It is an
-  # ephemeral container on the runner and never Neon.
-  db:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - run: docker compose up -d --wait db
-      - run: docker compose run --rm dbmate up
-      # A gate step, not a test: the committed schema is only true if the
-      # migrations regenerate it byte for byte.
-      - name: db/schema.sql matches what the migrations produce
-        run: git diff --exit-code db/schema.sql
-
   # Every pull request gets a public preview: a version of the production
-  # Worker, uploaded but not deployed, at a stable pr-<number> alias. It reads
-  # production Neon through the reader role, so it is safe by construction
-  # (ADR-0010). It is not part of `all-green`: the checks gate the merge, the
-  # preview is for reviewing it.
+  # Worker, uploaded but not deployed, at a stable pr-<number> alias, built from
+  # the records as the pull request leaves them (ADR-0010). It is not part of
+  # `all-green`: the checks gate the merge, the preview is for reviewing it.
   preview:
     runs-on: ubuntu-latest
     environment: production
     # Pull requests from forks get no secrets, so they get no preview.
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - name: Cloudflare is provisioned
-        id: provisioned
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::warning::No CLOUDFLARE_API_TOKEN in the production Environment, so no preview (see #38)."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.provisioned.outputs.ready == 'true'
-        uses: actions/checkout@v7
-      - if: steps.provisioned.outputs.ready == 'true'
-        uses: pnpm/action-setup@v6
-      - if: steps.provisioned.outputs.ready == 'true'
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: forecast
+          enable-cache: true
+      - run: uv sync --locked --no-dev
+        working-directory: forecast
+      - run: uv run --no-dev python -m forecast.export
+        working-directory: forecast
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
-      - if: steps.provisioned.outputs.ready == 'true'
-        run: pnpm install --frozen-lockfile
-      - if: steps.provisioned.outputs.ready == 'true'
-        run: pnpm --filter @cz-epf/web build
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cz-epf/web build
       - name: wrangler versions upload
-        if: steps.provisioned.outputs.ready == 'true'
-        working-directory: api
+        working-directory: web
         # An explicit `bash` runs with pipefail, so `| tee` keeps a failure.
         shell: bash
         env:
@@ -131,7 +94,7 @@ jobs:
 
   all-green:
     if: always()
-    needs: [python, typescript, db]
+    needs: [python, typescript]
     runs-on: ubuntu-latest
     steps:
       - name: Every gate job succeeded

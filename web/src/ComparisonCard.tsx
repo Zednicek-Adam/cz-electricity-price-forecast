@@ -9,7 +9,7 @@
  * stored tests are one-sided, so this is the stricter bar. An hour whose test
  * could not be computed is a gap in the line.
  */
-import type { ComparisonResponse, ModelSlug } from "@cz-epf/api";
+import type { ComparisonResponse, ModelSlug } from "./types.ts";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
@@ -31,7 +31,9 @@ interface Props {
 }
 
 export function ComparisonCard({ model, models, onModel }: Props) {
-  const comparison = useJson<ComparisonResponse>(`/api/comparisons/${model}`);
+  const comparison = useJson<ComparisonResponse>(
+    `/data/comparisons/${model}.json`,
+  );
 
   return (
     <>

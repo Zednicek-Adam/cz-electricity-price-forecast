@@ -1,6 +1,6 @@
-"""Grid repair: the one implementation (ADR-0001, ADR-0005).
+"""Grid repair: the one implementation (ADR-0001, ADR-0016).
 
-Observed prices are stored at true market periods, so a delivery day in
+Observed prices are held at true market periods, so a delivery day in
 `Europe/Prague` has 23, 24 or 25 of them. The models work on a regular grid of
 24 period ordinals. Grid repair flattens the first onto the second:
 
@@ -10,13 +10,12 @@ Observed prices are stored at true market periods, so a delivery day in
 * on a spring-forward day the missing 02:00 is interpolated linearly, as the
   mean of the periods either side of the gap.
 
-It is lossy, and it is applied exactly once: the loader stores its output in
-`repaired_observed_price`, in the same transaction as the observed prices, and
-everything downstream reads the stored repaired observed prices. Nothing
-applies grid repair at read time.
+It is lossy, and it has one caller: `forecast.loader`, which applies it to
+the hourly prices on the way out of the record. Everything downstream reads
+what the loader returns; the record itself is never repaired.
 
-Prices are `Decimal` so grid repair is exact: the mean of two prices published to
-two decimals has at most three, and `numeric` stores it as it is.
+Prices are `Decimal` so grid repair is exact: the mean of two prices published
+to two decimals has at most three.
 """
 
 from collections import defaultdict
@@ -29,7 +28,7 @@ from zoneinfo import ZoneInfo
 PRAGUE = ZoneInfo("Europe/Prague")
 HOUR = timedelta(hours=1)
 REPAIRED_PERIODS_PER_DAY = 24
-RESOLUTION_MINUTES = 60  # v1's only resolution: the record ends before 2025-10-01
+RESOLUTION_MINUTES = 60  # the repaired grid's; quarter-hours are averaged first
 
 
 class IncompleteDeliveryDay(ValueError):

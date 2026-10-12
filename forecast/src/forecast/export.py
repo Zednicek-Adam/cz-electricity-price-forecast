@@ -22,7 +22,7 @@ describe a forecast the record no longer holds (ADR-0010).
 Before it writes, it checks the record and stops on the first failure:
 
 * every model is on the roster, and has a forecast run on every delivery day
-  of the frozen backtest, 2020-01-01 to 2024-12-31;
+  of the 2020-01-01 to 2024-12-31 backtest;
 * at most one delivery day has forecasts but no published price: the pending
   forecast (CONTEXT.md);
 * the day-lag naïve's own overall rMAE reads exactly 1.000.

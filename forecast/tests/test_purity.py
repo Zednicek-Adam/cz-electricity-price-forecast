@@ -7,21 +7,22 @@ nothing else defends that property as the code grows. It is checked five ways,
 for every model on the roster:
 
 1. the call takes exactly `(history, target_day)`;
-2. the constructed model holds nothing that reaches the store, a provider or a
-   clock, looking through closures, partials and bound methods;
-3. the call succeeds with the network, the database driver and the clocks
-   sealed shut;
+2. the constructed model holds nothing that reaches the records, a provider
+   or a clock, looking through closures, partials and bound methods;
+3. the call succeeds with the network, file opening and the clocks sealed
+   shut;
 4. no module in `forecast.models` imports a way out, opens a file, reads a
    dataset, or asks for the time;
-5. behaviourally: rewriting every stored price from the target day onward does
-   not change the forecast. This is the check the other four exist to explain.
+5. behaviourally: rewriting every price from the target day onward does not
+   change the forecast. This is the check the other four exist to explain.
 
 Check 3 replaces functions with ones that raise. That is not the mocking the
-testing rules forbid — nothing stands in for a database or returns a canned
+testing rules forbid — nothing stands in for the records or returns a canned
 answer; it proves a model never calls out at all.
 """
 
 import ast
+import builtins
 import functools
 import importlib
 import inspect
@@ -29,24 +30,23 @@ import pkgutil
 import socket
 import time
 import types
+import urllib.request
 from collections.abc import Iterator
 from datetime import date
+from functools import cache
 
 import pandas as pd
-import psycopg
 import pytest
 
 import forecast.models
 from conftest import built, roster
-from forecast.history import StoredHistory
-from forecast.loader import load_frozen_dataset
+from forecast.loader import repaired_history
 from forecast.runner import run_forecast
 
 SLUGS = roster()
 
 # Modules that are, or that lead to, a store, a provider, a clock or the network.
 FORBIDDEN_MODULES = (
-    "psycopg",
     "socket",
     "time",
     "urllib",
@@ -55,12 +55,21 @@ FORBIDDEN_MODULES = (
     "requests",
     "sqlalchemy",
     "sqlite3",
-    "forecast.history",
     "forecast.loader",
+    "forecast.forecasts",
     "forecast.runner",
+    "forecast.entsoe",
+    "forecast.daily",
+    "forecast.replay",
+    "forecast.export",
 )
 # Where the store's modules reach data or state, whatever they are imported as.
-STORE_MODULES = ("psycopg", "forecast.history", "forecast.loader", "forecast.runner")
+STORE_MODULES = (
+    "forecast.loader",
+    "forecast.forecasts",
+    "forecast.runner",
+    "forecast.entsoe",
+)
 FORBIDDEN_CALLS = {"now", "today", "utcnow", "open"}
 FORBIDDEN_STRINGS = {"now", "today"}  # pd.Timestamp("now"), np.datetime64("today")
 
@@ -144,12 +153,14 @@ def test_forecast_runs_with_the_network_and_the_clocks_sealed(
     def sealed(*args: object, **kwargs: object) -> None:
         raise AssertionError("a model reached outside its argument")
 
-    monkeypatch.setattr(psycopg, "connect", sealed)
+    history = some_history()
     monkeypatch.setattr(socket.socket, "connect", sealed)
+    monkeypatch.setattr(urllib.request, "urlopen", sealed)
+    monkeypatch.setattr(builtins, "open", sealed)
     for clock in ("time", "time_ns", "monotonic", "perf_counter"):
         monkeypatch.setattr(time, clock, sealed)
 
-    assert len(model.forecast(some_history(), date(2025, 1, 1))) == 24
+    assert len(model.forecast(history, date(2025, 1, 1))) == 24
 
 
 @pytest.mark.parametrize("module", model_modules(), ids=lambda m: m.__name__)
@@ -180,30 +191,22 @@ def test_no_model_module_imports_a_way_out_or_reads_the_time(
     assert not strings & FORBIDDEN_STRINGS
 
 
-@pytest.fixture(scope="module")
-def frozen_store(database_url: str) -> Iterator[psycopg.Connection]:
-    """The frozen dataset, loaded once for this module and rolled back after."""
-    with (
-        psycopg.connect(database_url) as conn,
-        conn.transaction(force_rollback=True),
-    ):
-        load_frozen_dataset(conn)
-        yield conn
+@cache
+def record() -> pd.Series:
+    """The repaired observed prices, read once for this module."""
+    return repaired_history()
 
 
 @pytest.mark.parametrize("slug", SLUGS)
-def test_rewriting_the_store_from_the_target_day_onward_changes_no_forecast(
-    frozen_store: psycopg.Connection, slug: str
+def test_rewriting_every_price_from_the_target_day_onward_changes_no_forecast(
+    slug: str,
 ) -> None:
     target = date(2024, 6, 1)
-    before = run_forecast(built(slug), target, StoredHistory(frozen_store))
+    history = record()
+    before = run_forecast(built(slug), target, history)
 
-    with frozen_store.transaction(force_rollback=True):
-        frozen_store.execute(
-            "UPDATE repaired_observed_price SET price = -9999"
-            " WHERE delivery_date >= %s",
-            (target,),
-        )
-        after = run_forecast(built(slug), target, StoredHistory(frozen_store))
+    rewritten = history.copy()
+    rewritten[rewritten.index >= pd.Timestamp(target)] = -9999.0
+    after = run_forecast(built(slug), target, rewritten)
 
     assert after == before

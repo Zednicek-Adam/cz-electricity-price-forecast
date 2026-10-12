@@ -1,8 +1,8 @@
 /**
  * How the interface names, colours and formats things. Rendering rules only:
- * every figure arrives from the API already computed.
+ * every figure arrives from the export already computed.
  */
-import type { Metric, ModelSlug } from "@cz-epf/api";
+import type { Metric, ModelSlug } from "./types.ts";
 
 /** The benchmark is "Naïve" in the interface; the slug stays `daylag` (ADR-0007). */
 export const MODEL_LABELS: Record<ModelSlug, string> = {

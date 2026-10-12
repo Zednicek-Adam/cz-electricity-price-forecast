@@ -1,12 +1,11 @@
 /**
- * The client's only way to the data: one GET per payload, typed by the API's
- * own contract (`@cz-epf/api`), imported across the workspace with nothing
- * generated.
+ * The client's only way to the data: one GET per file under `/data/`, which
+ * the export wrote at deploy time, typed by `types.ts`.
  *
- * Each payload is fetched once per visit, the first time a view needs it, and
+ * Each file is fetched once per visit, the first time a view needs it, and
  * kept: switching back to a view, a metric or a day already seen costs no
- * request. Nothing polls and nothing refreshes on a timer, because previews
- * read production Neon and a tab left open must cost nothing (ADR-0010).
+ * request. Nothing polls and nothing refreshes on a timer: the files change
+ * only with a deploy (ADR-0016).
  */
 import { useEffect, useState } from "react";
 

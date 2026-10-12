@@ -1,7 +1,8 @@
 /**
  * A five-day record the seam-4 tests serve through a stubbed `fetch`, shaped
- * by the API's own types. The headline model's worst and best days differ by
- * metric, so a navigator that ignores the selected metric lands wrong.
+ * by `types.ts`. The headline model's worst and best days differ by metric, so
+ * a navigator that ignores the selected metric lands wrong. A variant record
+ * carries a pending day after them.
  */
 import type {
   AccuracyResponse,
@@ -10,8 +11,9 @@ import type {
   DeliveryDayResponse,
   Metric,
   ModelSlug,
+  RecordResponse,
   RunningMetricResponse,
-} from "@cz-epf/api";
+} from "./types.ts";
 
 export const DAYS = [
   "2024-12-27",
@@ -20,6 +22,21 @@ export const DAYS = [
   "2024-12-30",
   "2024-12-31",
 ];
+
+export const RECORD: RecordResponse = {
+  first: "2020-01-01",
+  last: "2024-12-31",
+  pending: null,
+};
+
+/** The day after the record, forecast and not yet published. */
+export const PENDING_DAY = "2025-01-01";
+
+export const RECORD_WITH_PENDING: RecordResponse = {
+  ...RECORD,
+  last: PENDING_DAY,
+  pending: PENDING_DAY,
+};
 
 /** chronos2's published figure per day, per metric. */
 export const DAILY: Record<Metric, number[]> = {
@@ -59,6 +76,15 @@ export function dayPayload(day: string): DeliveryDayResponse {
       { model: "ar168", mae: 15.05, rmse: 22.5, smape: 21.25, rmae: 0.7525 },
       { model: "daylag", mae: 20, rmse: 30, smape: 25, rmae: 1 },
     ],
+  };
+}
+
+export function pendingPayload(): DeliveryDayResponse {
+  return {
+    deliveryDate: PENDING_DAY,
+    observed: null,
+    forecasts: dayPayload("2024-12-31").forecasts,
+    metrics: [],
   };
 }
 
@@ -113,9 +139,15 @@ export function comparisonPayload(model: ModelSlug): ComparisonResponse {
   };
 }
 
-/** What the stubbed network answers for a path, or undefined for a 404. */
-export function payloadFor(path: string): unknown {
-  const [, , kind, arg] = path.split("/");
+/** What the stubbed network answers for a path under `/data/`, or undefined
+ * for a 404. */
+export function payloadFor(
+  path: string,
+  record: RecordResponse = RECORD,
+): unknown {
+  const [, , kind, arg] = path.replace(/\.json$/, "").split("/");
+  if (kind === "record") return record;
+  if (kind === "days" && arg === record.pending) return pendingPayload();
   if (kind === "days" && arg && DAYS.includes(arg)) return dayPayload(arg);
   if (kind === "daily" && arg) return dailyPayload(arg as Metric);
   if (kind === "running" && arg) return runningPayload(arg as Metric);

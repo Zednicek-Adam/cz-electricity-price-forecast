@@ -109,8 +109,7 @@ def merge(held: Iterable[StoredRun], new: Iterable[StoredRun]) -> list[StoredRun
     for run in new:
         if (kept := record.get(run.key)) is not None and kept.run_type == "live":
             raise ValueError(
-                f"{run.model} on {run.delivery_date}: a live forecast is never"
-                " replaced"
+                f"{run.model} on {run.delivery_date}: a live forecast is never replaced"
             )
         record[run.key] = run
     return sorted(record.values(), key=lambda r: r.key)

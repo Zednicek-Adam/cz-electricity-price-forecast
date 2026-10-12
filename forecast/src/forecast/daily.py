@@ -84,9 +84,7 @@ def ingest(fetch: Fetch, through: date, path: Path = PRICES) -> list[date]:
     if later := sorted(d for d in touched if d > day):
         raise IngestFailed(f"{day} is missing, but {later[0]} is published")
 
-    append_prices(
-        [published[t] for d in appended for t in sorted(complete[d])], path
-    )
+    append_prices([published[t] for d in appended for t in sorted(complete[d])], path)
     return appended
 
 
@@ -94,6 +92,7 @@ def forecast_pending(
     prices_path: Path = PRICES,
     forecasts_path: Path = FORECASTS,
     *,
+    models: Sequence[str] = tuple(ROSTER),
     code_version: str | None = None,
 ) -> tuple[date, list[str]]:
     """Forecast the first delivery day without a published price, for every
@@ -102,7 +101,7 @@ def forecast_pending(
     target = history.index[-1].date() + timedelta(days=1)
     held = read_forecasts(forecasts_path)
     have = {r.model for r in held if r.delivery_date == target}
-    todo = [slug for slug in ROSTER if slug not in have]
+    todo = [slug for slug in models if slug not in have]
     if not todo:
         return target, []
     code_version = code_version or current_code_version()
@@ -138,9 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else "nothing new",
         )
         target, models = forecast_pending()
-        log.info(
-            "forecast %s: %s", target, ", ".join(models) or "already forecast"
-        )
+        log.info("forecast %s: %s", target, ", ".join(models) or "already forecast")
     except Exception as failure:
         if os.environ.get("GITHUB_ACTIONS"):
             print(f"::error title=Daily run failed::{failure}")

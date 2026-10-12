@@ -2,7 +2,6 @@
 __pycache__/
 analysis/raw/
 .scratch-*/
-*/.dev.vars
 
 # Python, under uv
 .venv/
@@ -12,6 +11,9 @@ analysis/raw/
 # TypeScript, under pnpm
 node_modules/
 dist/
+
+# Written by `forecast.export` at deploy time, never committed (ADR-0016).
+web/public/data/
 
 # Wrangler's local build and state.
 .wrangler/

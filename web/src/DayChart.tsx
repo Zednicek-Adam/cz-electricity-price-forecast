@@ -9,9 +9,10 @@
  * swaps the tick density.
  *
  * Daylight-saving days are drawn on the repaired 24-period grid like any
- * other, with no note, and negative prices are drawn as they cleared.
+ * other, with no note, and negative prices are drawn as they cleared. The
+ * pending day has no observed line: its price is not published yet.
  */
-import type { DeliveryDayResponse, ModelSlug } from "@cz-epf/api";
+import type { DeliveryDayResponse, ModelSlug } from "./types.ts";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
@@ -35,19 +36,21 @@ interface Series {
 export function DayChart({ day }: { day: DeliveryDayResponse }) {
   const [hovered, setHovered] = useState<number | null>(null);
 
-  for (const prices of [day.observed, ...day.forecasts.map((f) => f.prices)]) {
-    if (prices.length !== 24) {
-      throw new Error(`${day.deliveryDate}: ${prices.length} prices, not 24`);
-    }
-  }
   const series: Series[] = [
-    { key: "observed", label: "Observed", prices: day.observed },
+    ...(day.observed
+      ? [{ key: "observed" as const, label: "Observed", prices: day.observed }]
+      : []),
     ...day.forecasts.map((f) => ({
       key: f.model,
       label: MODEL_LABELS[f.model],
       prices: f.prices,
     })),
   ];
+  for (const s of series) {
+    if (s.prices.length !== 24) {
+      throw new Error(`${day.deliveryDate}: ${s.prices.length} prices, not 24`);
+    }
+  }
   const all = series.flatMap((s) => s.prices);
   const x = scaleLinear({
     domain: [1, 24],
@@ -63,9 +66,10 @@ export function DayChart({ day }: { day: DeliveryDayResponse }) {
     series.map((s) => y(s.prices.at(-1) as number) + 4),
   );
   const columnWidth = (WIDTH - MARGIN.left - MARGIN.right) / 23;
-  const label = `${day.deliveryDate}: the observed price and the forecasts of ${day.forecasts
-    .map((f) => MODEL_LABELS[f.model])
-    .join(", ")}, in EUR/MWh, by period ordinal 1 to 24.`;
+  const forecasts = day.forecasts.map((f) => MODEL_LABELS[f.model]).join(", ");
+  const label = `${day.deliveryDate}: ${
+    day.observed ? "the observed price and " : ""
+  }the forecasts of ${forecasts}, in EUR/MWh, by period ordinal 1 to 24.`;
 
   return (
     <div className="chart">

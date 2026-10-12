@@ -12,26 +12,15 @@ import pandas as pd
 import pytest
 
 from conftest import built, roster
-from forecast.grid import market_label, repair_grid
-from forecast.loader import read_frozen_dataset
-from forecast.model import history_series
+from forecast.loader import repaired_history
 from forecast.models.daylag import DayLagNaive
 from forecast.runner import run_forecast
 
 
 @cache
 def frozen_history() -> pd.Series:
-    """The frozen dataset, grid-repaired in memory, as the runner would hand it."""
-    prices = {p.delivery_start: p.price for p in read_frozen_dataset()}
-    repaired = repair_grid(prices)
-    return history_series(
-        [market_label(r.delivery_date, r.period_ordinal) for r in repaired],
-        [float(r.price) for r in repaired],
-    )
-
-
-def in_memory(target_day: date) -> pd.Series:
-    return frozen_history()
+    """The price record, grid-repaired, as the runner would hand it."""
+    return repaired_history()
 
 
 def test_the_naive_is_yesterdays_prices_to_the_value() -> None:
@@ -53,11 +42,13 @@ def test_the_naive_is_yesterdays_prices_to_the_value() -> None:
         date(2024, 4, 1),  # the day after, fed a repaired 23-period day
         date(2024, 10, 27),  # fall back
         date(2024, 10, 28),  # the day after, fed a repaired 25-period day
-        date(2024, 12, 31),  # the last replayed day
+        date(2024, 12, 31),  # the last day of the frozen record
+        date(2025, 10, 1),  # the first day fed Average Rule prices
+        date(2026, 3, 30),  # the day after a 92-quarter-hour day
     ],
 )
 def test_every_model_returns_24_finite_floats(slug: str, target_day: date) -> None:
-    run = run_forecast(built(slug), target_day, in_memory)
+    run = run_forecast(built(slug), target_day, frozen_history())
 
     assert len(run.prices) == 24
     assert all(isinstance(p, float) for p in run.prices)
@@ -67,6 +58,6 @@ def test_every_model_returns_24_finite_floats(slug: str, target_day: date) -> No
 def test_the_naive_carries_a_daylight_saving_day_on_the_repaired_grid() -> None:
     # 2024-03-31 has no 02:00; grid repair interpolates one, and the next day's
     # naïve forecast for period ordinal 3 is that interpolated price.
-    run = run_forecast(DayLagNaive(), date(2024, 4, 1), in_memory)
+    run = run_forecast(DayLagNaive(), date(2024, 4, 1), frozen_history())
 
     assert run.prices[2] == 50.385

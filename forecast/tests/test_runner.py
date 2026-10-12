@@ -1,8 +1,7 @@
-"""Seam 2: forecast runs against a real Postgres, asserted on stored rows.
+"""Seam 2: forecast runs on a short synthetic record.
 
-The store holds a short synthetic record written by the real loader, spanning
-the 2024 spring-forward day; every price is distinct, so a forecast shows
-exactly which stored price it came from. Runs are written as `app_writer`.
+The record spans the 2024 spring-forward day, and every price is distinct, so
+a forecast shows exactly which price it came from.
 """
 
 import re
@@ -10,19 +9,17 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pandas as pd
-import psycopg
 import pytest
 
-from forecast.grid import true_periods
-from forecast.history import StoredHistory
-from forecast.loader import ObservedPrice, Provenance, load_observed_prices
+from forecast.grid import repair_grid, true_periods
+from forecast.loader import as_history
 from forecast.models.daylag import DayLagNaive
 from forecast.runner import (
+    ForecastRunFailed,
     HistoryGap,
-    Run,
     current_code_version,
+    run_days,
     run_forecast,
-    write_run,
 )
 
 FIRST_DAY = date(2024, 3, 25)
@@ -36,24 +33,14 @@ def synthetic_price(day: date, index: int) -> Decimal:
 
 
 @pytest.fixture
-def writer(db: psycopg.Connection) -> psycopg.Connection:
+def history() -> pd.Series:
     days = [FIRST_DAY + timedelta(days=i) for i in range((LAST_DAY - FIRST_DAY).days)]
-    prices = [
-        ObservedPrice(start, 60, synthetic_price(day, i))
+    prices = {
+        start: synthetic_price(day, i)
         for day in days
         for i, start in enumerate(true_periods(day))
-    ]
-    db.execute("SET LOCAL ROLE app_writer")
-    load_observed_prices(db, prices, Provenance("test", datetime.now(UTC)))
-    return db
-
-
-def stored_forecast(conn: psycopg.Connection, day: date = TARGET) -> list[tuple]:
-    return conn.execute(
-        "SELECT period_ordinal, price, model, run_type, model_version, code_version"
-        " FROM forecast WHERE delivery_date = %s ORDER BY period_ordinal",
-        (day,),
-    ).fetchall()
+    }
+    return as_history(repair_grid(prices))
 
 
 class Recorder:
@@ -71,25 +58,26 @@ class Recorder:
         return [0.0] * 24
 
 
-def test_a_run_is_written_as_24_rows_carrying_its_versions(
-    writer: psycopg.Connection,
+def test_a_run_is_24_forecasts_carrying_its_model_version(
+    history: pd.Series,
 ) -> None:
-    run = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-    write_run(writer, run, run_type="backtest", code_version="abc123")
+    run = run_forecast(DayLagNaive(), TARGET, history)
 
-    rows = stored_forecast(writer)
-    assert [r[0] for r in rows] == list(range(1, 25))
-    assert [r[1] for r in rows] == [
-        synthetic_price(date(2024, 4, 1), i) for i in range(24)
-    ]
-    assert {r[2:] for r in rows} == {("daylag", "backtest", "daylag-d1", "abc123")}
+    assert (run.model, run.model_version, run.delivery_date) == (
+        "daylag",
+        "daylag-d1",
+        TARGET,
+    )
+    assert run.prices == tuple(
+        float(synthetic_price(date(2024, 4, 1), i)) for i in range(24)
+    )
 
 
 def test_the_cutoff_excludes_every_period_from_the_target_day_onward(
-    writer: psycopg.Connection,
+    history: pd.Series,
 ) -> None:
     model = Recorder()
-    run_forecast(model, TARGET, StoredHistory(writer))
+    run_forecast(model, TARGET, history)
 
     assert model.seen is not None
     assert model.seen.index[0] == datetime(2024, 3, 30, 0)
@@ -97,97 +85,44 @@ def test_the_cutoff_excludes_every_period_from_the_target_day_onward(
     assert len(model.seen) == 3 * 24
 
 
-def test_a_gap_in_the_required_history_raises_and_writes_nothing(
-    writer: psycopg.Connection,
-) -> None:
-    writer.execute("RESET ROLE")
-    writer.execute(
-        "DELETE FROM repaired_observed_price"
-        " WHERE delivery_date = %s AND period_ordinal = 7",
-        (TARGET - timedelta(days=1),),
-    )
+def test_a_gap_in_the_required_history_raises(history: pd.Series) -> None:
+    gapped = history.drop(datetime(2024, 4, 1, 6))
 
+    with pytest.raises(HistoryGap, match="1 of 24 periods missing"):
+        run_forecast(DayLagNaive(), TARGET, gapped)
+
+
+def test_history_before_the_record_begins_is_a_gap(history: pd.Series) -> None:
     with pytest.raises(HistoryGap):
-        run = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-        write_run(writer, run, run_type="backtest", code_version="abc123")
-
-    assert stored_forecast(writer) == []
+        run_forecast(DayLagNaive(), FIRST_DAY, history)
 
 
-def test_history_before_the_record_begins_is_a_gap(writer: psycopg.Connection) -> None:
-    with pytest.raises(HistoryGap):
-        run_forecast(DayLagNaive(), FIRST_DAY, StoredHistory(writer))
+def test_the_day_loop_yields_rows_of_the_record(history: pd.Series) -> None:
+    days = [TARGET, TARGET + timedelta(days=1)]
 
-
-def test_a_rerun_deletes_and_reinserts_rather_than_upserting(
-    writer: psycopg.Connection,
-) -> None:
-    run = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-    write_run(writer, run, run_type="backtest", code_version="first")
-    writer.execute("RESET ROLE")
-    writer.execute(
-        "INSERT INTO forecast VALUES (%s, 25, 60, 'daylag', 'backtest', 1,"
-        " 'daylag-d1', 'first', now())",
-        (TARGET,),
+    runs = list(
+        run_days(DayLagNaive(), days, history, run_type="backtest", code_version="c")
     )
-    writer.execute("SET LOCAL ROLE app_writer")  # which holds no UPDATE at all
 
-    write_run(writer, run, run_type="backtest", code_version="second")
-
-    rows = stored_forecast(writer)
-    assert [r[0] for r in rows] == list(range(1, 25))
-    assert {r[5] for r in rows} == {"second"}
-
-
-def test_a_rerun_leaves_other_models_run_types_and_days_alone(
-    writer: psycopg.Connection,
-) -> None:
-    run = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-    other_day = run_forecast(
-        DayLagNaive(), TARGET + timedelta(days=1), StoredHistory(writer)
-    )
-    other_model = Run("ar168", "x", TARGET, run.prices)
-    for r in (run, other_day, other_model):
-        write_run(writer, r, run_type="backtest", code_version="first")
-    write_run(writer, run, run_type="live", code_version="first")
-
-    write_run(writer, run, run_type="backtest", code_version="second")
-
-    counts = writer.execute(
-        "SELECT model, run_type, delivery_date, code_version, count(*) FROM forecast"
-        " GROUP BY 1, 2, 3, 4 ORDER BY 1, 2, 3"
-    ).fetchall()
-    assert counts == [
-        ("ar168", "backtest", TARGET, "first", 24),
-        ("daylag", "backtest", TARGET, "second", 24),
-        ("daylag", "backtest", TARGET + timedelta(days=1), "first", 24),
-        ("daylag", "live", TARGET, "first", 24),
+    assert [(r.delivery_date, r.model, r.run_type, r.code_version) for r in runs] == [
+        (day, "daylag", "backtest", "c") for day in days
     ]
+    assert all(r.executed_at.tzinfo == UTC for r in runs)
 
 
-def test_a_crash_mid_write_leaves_the_previous_run_whole(
-    writer: psycopg.Connection,
+def test_the_day_loop_names_the_run_that_failed_and_keeps_the_ones_before(
+    history: pd.Series,
 ) -> None:
-    run = run_forecast(DayLagNaive(), TARGET, StoredHistory(writer))
-    write_run(writer, run, run_type="backtest", code_version="first")
-    writer.execute("RESET ROLE")
-    writer.execute(
-        "CREATE FUNCTION pg_temp.crash() RETURNS trigger LANGUAGE plpgsql AS"
-        " $$ BEGIN IF NEW.period_ordinal = 13 THEN RAISE EXCEPTION 'crash';"
-        " END IF; RETURN NEW; END $$"
-    )
-    writer.execute(
-        "CREATE TRIGGER crash BEFORE INSERT ON forecast"
-        " FOR EACH ROW EXECUTE FUNCTION pg_temp.crash()"
-    )
-    writer.execute("SET LOCAL ROLE app_writer")
+    runs = []
+    days = [LAST_DAY - timedelta(days=1), LAST_DAY, LAST_DAY + timedelta(days=1)]
 
-    with pytest.raises(psycopg.errors.RaiseException):
-        write_run(writer, run, run_type="backtest", code_version="second")
+    with pytest.raises(ForecastRunFailed, match="daylag on 2024-04-06"):
+        for run in run_days(
+            DayLagNaive(), days, history, run_type="backtest", code_version="c"
+        ):
+            runs.append(run)
 
-    rows = stored_forecast(writer)
-    assert len(rows) == 24
-    assert {r[5] for r in rows} == {"first"}
+    assert [r.delivery_date for r in runs] == days[:2]
 
 
 def test_the_code_version_is_a_git_sha() -> None:
