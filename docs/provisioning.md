@@ -1,101 +1,39 @@
 # Provisioning: the human-only gates
 
-The runbook for [issue #38][i38]. ADR-0013 decides *what* has to be provisioned
-and *when*; this file is the click path and the exact command for each row, so a
-gate is opened once rather than re-derived every time one blocks a ticket.
-
-Every row here is a step **no agent session can perform**, and every row gates
-everything behind it. The checklist is standing: it spans phases 0 through 3 and
-stays open until the last row is ticked. Downstream tickets name the row they
-need — "the **reader role** row of #38" — rather than blocking on the whole
-issue.
-
-**The checkboxes on issue #38 are the record.** Tick a row there when you finish
-it; this file is instructions, not state.
-
-Three Neon roles, not two. **No ENTSO-E token and no Hugging Face token exists
-anywhere in v1** — v1 reads the frozen dataset in `data/`, and `amazon/chronos-2`
-is a public Apache-2.0 artifact. The ENTSO-E token stays in the gitignored `.env`
-for the live branch, and nothing in v1 reads it.
+The click path and the exact command for everything this project needs from a
+person rather than from code: the accounts, the credentials and the repository
+settings. Every row gates something; each says what.
 
 Two conventions for the commands below. They assume `gh` is on your `PATH` — on
 Windows it installs to `C:\Program Files\GitHub CLI`, which Git Bash does not
-always pick up. And when you generate a role password, **use alphanumerics
-only**: the password is spliced into a connection URL, and a `@`, `:`, `/`, `?`,
-`#` or `%` in it has to be percent-encoded or the URL silently parses wrong.
-
-## The three hazards, before you start
-
-None of these announces itself when you get it wrong. All three are worth reading
-before the first row rather than after the failing one.
-
-**A Neon role created in the Console is not restricted.** Neon's documentation is
-explicit: roles created through the Console, CLI or API are automatically granted
-membership in `neon_superuser`, which carries `CREATEDB`, `CREATEROLE`,
-`BYPASSRLS` and read/write on every table. A role created with `CREATE ROLE` in
-SQL gets none of that and must be granted each privilege explicitly. So the
-writer and the reader are created **in the SQL Editor**, not with **Add role** —
-otherwise the reader row's "restricted to `SELECT`" is false the moment it is
-ticked, and nothing downstream would ever catch it, because a superuser reader
-passes every test a restricted one passes.
-
-**The reader role is needed in phase 1, not phase 2.** ADR-0005 puts every
-`GRANT` in a migration, which is why `migrate` connects as owner. But a migration
-that grants to a role errors if the role does not exist, and #42 — "the reader
-role's `SELECT` grant lives in a migration" — lands in **phase 1**, with the five
-tables. So the reader must be created before #42's migration first runs on a
-merge to `main`. This **narrows ADR-0013's provisioning table**, which files the
-reader under phase 2: the *credential* is first consumed in phase 2 by the API,
-but the *role* has to exist a phase earlier. Creating all three roles in one
-sitting at phase 0 costs nothing and removes the hazard entirely.
-
-**The writer's grants are narrower than "read/write".**
-`db/migrations/20260925000001_grant_the_writer_and_the_reader.sql` grants
-`app_writer` exactly the verbs ADR-0005's write semantics use. On
-`observed_price` and `repaired_observed_price` it may `SELECT` and `INSERT`
-only, so the historical record cannot be rewritten by the role that loads it.
-On `forecast`, `published_metric` and `model_comparison` it may `SELECT`,
-`INSERT` and `DELETE`. It never gets `UPDATE`, because a re-run replaces rows
-rather than upserting them. There are no sequences, since every key is
-natural.
+always pick up. And every secret goes into the **`production` GitHub
+Environment**, so only the jobs that declare `environment: production` can read
+it.
 
 ## Names
 
-Nothing in the ADRs fixed the secret names ahead of time. The three Neon names
-below were settled when the roles were provisioned; the tickets that consume them
-(#40, #47, #49, #53) must use exactly these. This file deliberately does not
-invent them. Each name is fixed by whichever ticket first consumes the value —
-**write the name back into this table when that ticket lands**, so the next
-session reads it here instead of guessing.
-
-| Value | Lives in | Name | Fixed by |
+| Value | Lives in | Name | Read by |
 |---|---|---|---|
-| Neon **owner** URL | `production` GitHub Environment | `NEON_OWNER` | provisioned 2026-09-07 |
-| Neon **writer** URL | local `.env` and the same Environment | `NEON_WRITER` | provisioned 2026-09-07 |
-| Neon **reader** URL | `api/.dev.vars`, then the Worker | `NEON_READER` | provisioned 2026-09-07 |
-| Cloudflare API token | the same Environment | `CLOUDFLARE_API_TOKEN` | Cloudflare's own docs |
-| Cloudflare account id | the same Environment | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare's own docs |
+| Cloudflare API token | `production` Environment | `CLOUDFLARE_API_TOKEN` | `main.yml`, the gate's `preview` job |
+| Cloudflare account id | `production` Environment | `CLOUDFLARE_ACCOUNT_ID` | the same |
+| ENTSO-E security token | `production` Environment, and `.env` locally | `ENTSOE_API_TOKEN` | `daily.yml` |
+| Deploy key, private half | `production` Environment | `DEPLOY_KEY` | `daily.yml`, `replay.yml` |
+| Deploy key, public half | the repository's deploy keys, write access | `daily run (pushes data commits to main)` | GitHub |
 
-The two Cloudflare names are not a free choice: `cloudflare/wrangler-action`
-documents exactly those, so they are settled here.
+The two Cloudflare names are not a free choice: Wrangler reads exactly those.
 
-Postgres role names are fixed by the grant migration: **`app_writer`** and
-**`app_reader`**. Neon's default owner is `neondb_owner`. The migration fails
-on a database where either role is missing, rather than skipping the grant.
+**Kept, and read by nothing.** `NEON_OWNER` and `NEON_WRITER` in the
+`production` Environment, and `NEON_READER` on the Worker, belong to the design
+before ADR-0016: a Neon database behind a read API. They stay, with the Neon
+project, so that design can be restored from the `v1-neon` tag without
+provisioning anything again (issue #86, section 6). Their runbook is this file
+at that tag.
 
-Placeholders in the commands below read `<OWNER-SECRET-NAME>`,
-`<WRITER-SECRET-NAME>` and `<READER-SECRET-NAME>`. Substitute, don't paste.
+## Flip the repository public
 
-## Phase 0 — open the gate and stand up the store
-
-### Flip the repository public
-
-**Gates** unmetered Actions, the smoke replay, and preview URLs that point
-somewhere a reader can open. It also gates the `production` Environment itself:
-GitHub's own wording is that "users with GitHub Free plans can only configure
-environments for public repositories", so on a Free plan the next two rows are
-unreachable until this one is done. That makes the ordering load-bearing rather
-than aesthetic.
+**Gates** unmetered Actions minutes, the scheduled daily run (ADR-0012), and the
+`production` Environment itself: on a GitHub Free plan, environments can only be
+configured for public repositories.
 
 First, confirm the history is clean. Both commands must print nothing:
 
@@ -111,237 +49,109 @@ gh repo edit Zednicek-Adam/cz-electricity-price-forecast \
   --visibility public --accept-visibility-change-consequences
 ```
 
-`gh` requires that second flag because the change is not cosmetic: it detaches
-public forks, can disable push rulesets, and opens Actions history and logs to
-anyone. On this repository, at this point in the build, all three are fine — but
-read them rather than skipping past them.
+**Verify:** `gh repo view --json visibility` prints `{"visibility":"PUBLIC"}`.
 
-**Verify:**
+## Cloudflare
 
-```sh
-gh repo view Zednicek-Adam/cz-electricity-price-forecast --json visibility
-```
+**Gates** every deploy and every preview.
 
-prints `{"visibility":"PUBLIC"}`.
-
-### Create the Neon project
-
-**Gates** the entire store.
-
-1. Open <https://console.neon.tech> and create a project.
-2. Put it in an EU region — `aws-eu-central-1` (Frankfurt) is nearest to CZ. The
-   Worker's latency to Postgres is not what makes this choice; keeping an
-   EU-derived dataset in an EU region is.
-3. Keep the default database name (`neondb`) unless you have a reason not to, and
-   note it — every `GRANT` below names it.
-4. Note the owner role Neon created for you. It is `neondb_owner` by default, and
-   it is the role the next row is about.
-
-**Verify:** the Console's **SQL Editor** runs `select version();`.
-
-### Owner role → the `production` GitHub Environment
-
-**Gates** `migrate`. Owner rather than writer, because `GRANT` requires ownership
-and ADR-0005 puts every `GRANT` in a migration — so the `migrate` job cannot
-connect as the writer.
-
-Create the environment:
-
-```sh
-gh api -X PUT repos/Zednicek-Adam/cz-electricity-price-forecast/environments/production
-```
-
-(Or **Settings → Environments → New environment → `production` → Configure
-environment**.)
-
-Copy the owner connection string: **Project Dashboard → Connect**, then pick the
-branch, database and the owner role. **Turn the connection pooling toggle off.**
-Neon's guidance for schema migrations is the direct connection, because migration
-tools lean on session-level features that transaction pooling does not support;
-the pooled string is for the Worker, three rows below. The result looks like:
-
-```
-postgresql://neondb_owner:<password>@ep-<id>.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-```
-
-Store it, pasting at the prompt so the URL never lands in shell history:
-
-```sh
-gh secret set <OWNER-SECRET-NAME> --env production
-```
-
-**Verify:** `gh secret list --env production` lists the name.
-
-## Phase 1 — the credential the replay runs as
-
-### Writer role → local `.env`, then the same Environment
-
-**Gates** the loader and the replay. The first real replay is driven from your
-machine as the writer (ADR-0013 narrows ADR-0010 on this point), which is why
-this value is needed in two places.
-
-Create the role **in the SQL Editor, connected as the owner** — not with **Add
-role**, for the reason in the hazards section:
-
-```sql
-CREATE ROLE app_writer WITH LOGIN PASSWORD '<long-random-alphanumeric>';
-```
-
-That is the whole manual step. No `GRANT` by hand: the writer's privileges belong
-in a migration, run by the owner. The third hazard says which privileges it
-gets.
-
-Neon will not show you a connection string for a role it did not create, so build
-it from the owner's by swapping the role and password and leaving the host,
-database and query string alone:
-
-```
-postgresql://app_writer:<password>@ep-<id>.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-```
-
-Put it in local `.env` (already gitignored, and never committed on any branch):
-
-```dotenv
-<WRITER-SECRET-NAME>=postgresql://app_writer:...
-```
-
-and in the Environment:
-
-```sh
-gh secret set <WRITER-SECRET-NAME> --env production
-```
-
-**Verify** in two directions. That the role is not over-privileged:
-
-```sql
-select pg_has_role('app_writer', 'neon_superuser', 'member');
-```
-
-must return `false` — if it returns `true` the role was created in the Console,
-so drop it and create it again in SQL. And that it is privileged enough: connect
-with the writer URL once the grant migration has run, and insert and delete a row
-in `observed_price`. A writer that cannot write passes every check above.
-
-## Phase 2 — the credential the API reads as
-
-### Reader role, restricted to `SELECT`
-
-**Gates** the API. This is the row the Console silently breaks, so run the same
-check as the writer's and mean it. Note the second hazard: the role itself is
-wanted a phase earlier than this row sits.
-
-```sql
-CREATE ROLE app_reader WITH LOGIN PASSWORD '<long-random-alphanumeric>';
-```
-
-Again, no `GRANT` by hand. The grant migration gives the reader `USAGE` on the
-schema and `SELECT` on each of the five tables by name, with no `INSERT`,
-`UPDATE` or `DELETE` anywhere. That is what "restricted to `SELECT`" means
-here.
-
-It deliberately uses no `ALTER DEFAULT PRIVILEGES`. A migration that adds a
-table grants on it explicitly, so the grant shows in the diff of the pull
-request that adds the table. The cost is that forgetting it makes an endpoint
-that works locally as `postgres` and fails in production as the reader. The
-API's tests connect as the reader for that reason.
-
-"Restricted to `SELECT`" is a statement about tables, not about everything. A
-freshly created role also inherits whatever `PUBLIC` holds — `CONNECT` and `TEMP`
-on the database, `USAGE` on the `public` schema — which is why the first two
-grants above are close to redundant. If you want the stricter reading, the
-migration is also where a `REVOKE ... FROM PUBLIC` would go; v1 does not need it,
-since `PUBLIC` reaches no table.
-
-Build the reader's connection string the same way as the writer's — but for the
-Worker, **leave connection pooling on** and use the `-pooler` host. Neon
-recommends the pooled string for serverless workloads, which is exactly what a
-Worker is.
-
-The reader URL is needed locally in this phase, before it is ever deployed: #49
-runs the Hono app under `wrangler dev` against Neon as the reader, and `wrangler`
-reads local secrets from **`api/.dev.vars`**. Put it there, and make sure that
-file is gitignored. Phase 3 puts the same value into the deployed Worker, by a
-different route.
-
-**Verify**, connected as `app_reader` once the grant migration has run: a
-`select` on a table returns rows, and an `insert` into any table fails with a
-permissions error. A reader that can insert is not a reader.
-
-## Phase 3 — Cloudflare, and the one secret GitHub never sees
-
-### Cloudflare account
-
-**Gates** any deploy. Sign up at <https://dash.cloudflare.com/sign-up>. The free
-tier is what ADR-0004 assumed across all three vendors; nothing here needs more.
-
-### `CLOUDFLARE_API_TOKEN` and the account id → the same Environment
-
-**Gates** the `deploy` and preview jobs.
-
-Do this row **after** #52 has re-verified Static Assets against current
-documentation. The account above can be created any time, but the token's
-permissions follow the deployment shape: if #52's finding sends v1 to Pages plus
-a routed Worker, the template below is the wrong one.
+Sign up at <https://dash.cloudflare.com/sign-up>; the free tier is enough. Then:
 
 1. Open <https://dash.cloudflare.com/profile/api-tokens> and select **Create
    Token**.
-2. Use the **Edit Cloudflare Workers** template — it carries Workers Scripts:Edit,
-   which is the permission ADR-0013 names. Scope it to this account and no zones.
-3. Copy the token. **It is shown once**; there is no way to read it back.
+2. Use the **Edit Cloudflare Workers** template, scoped to this account and no
+   zones.
+3. Copy the token. **It is shown once.**
 
 ```sh
 gh secret set CLOUDFLARE_API_TOKEN --env production
 ```
 
-Then the account id — **Workers & Pages → Account Details → Account ID**, or
-press `Ctrl/Cmd + K` in the dashboard and search `Copy account ID`:
+Then the account id — **Workers & Pages → Account Details → Account ID**:
 
 ```sh
 gh secret set CLOUDFLARE_ACCOUNT_ID --env production
 ```
 
-The account id is not secret, but it lives beside the token as a secret so that
-both halves of one credential are configured in one place and rotate together.
+The account id is not secret, but it lives beside the token so that both halves
+of one credential are configured in one place.
 
-**Verify:** `gh secret list --env production` lists four names.
+**Verify:** the next push to `main` deploys, and the gate's `preview` job writes
+a `pr-<number>` URL to its summary.
 
-### `wrangler secret put` the reader URL — it never enters GitHub
+## The ENTSO-E security token
 
-**Gates** the deployed Worker reaching Neon. This is the one credential that is
-set by hand, outside GitHub, and ADR-0010 flags it as an accepted gap: nothing
-re-provisions it for you, and nothing notices it is missing until a deploy
-returns a database error.
+**Gates** the daily run's ingest.
 
-Two ordering facts. `wrangler secret put` **creates a new version of the Worker
-and deploys it immediately**, so the Worker must already exist — run this after
-the first `wrangler deploy`, not before. And secrets are scoped to a Worker *and
-environment*. #53 settled on **versions**, not Wrangler environments: a pull
-request uploads a version of the one production Worker at a `pr-<number>`
-alias. So there is one secret to set, on that Worker, and nothing per preview.
-Check it once at the first preview: its `/api/accuracy` should answer rather
-than fail to connect (docs/research/cloudflare-static-assets.md).
+Getting one is two steps (issue #7). Register at
+<https://transparency.entsoe.eu/>, then email `transparency@entsoe.eu` with the
+subject `Restful API access` and the account's email address in the body. Once
+access is granted, **Account Settings** shows a generator for the Web API
+security token. The token does not expire.
 
-From `api/`, with the pooled reader URL on the clipboard:
+Keep it in the gitignored `.env` as `ENTSOE_API_TOKEN` for local runs, and put
+it in the Environment:
 
 ```sh
-npx wrangler secret put <READER-SECRET-NAME>
+gh secret set ENTSOE_API_TOKEN --env production
 ```
 
-**Verify:** `npx wrangler secret list` shows the name, and the deployed endpoint
-returns rows rather than a connection error.
+**Verify:** `gh workflow run daily.yml`, then the run's log shows
+`ingest:` rather than `ENTSOE_API_TOKEN is not set` or an HTTP 401.
 
-## Not in this checklist
+## The deploy key, and the ruleset that lets it past the gate
 
-ADR-0013's provisioning table has two more phase-3 rows that #38 does not carry:
-the **root README** with issue #20's four obligations (#51) and the
-**persistent dashboard footer attribution** (#53). Both come due at the first
-preview deploy, because a
-Cloudflare preview URL is publicly reachable whatever the repository's
-visibility.
+**Gates** the daily run's commit to `main`, and the replay's branch.
 
-ADR-0013 is inconsistent about them: it heads that table "every row is a step no
-agent session can perform", then lists two rows that are ordinary build steps an
-agent does perform. #38 resolves the inconsistency in favour of the heading, and
-this file follows #38. Nothing is lost — both rows have their own tickets.
+`main` requires the `all-green` check, which a data commit never has. A push
+made with the workflow's own `GITHUB_TOKEN` can bypass nothing, and would not
+start `main.yml` either. A deploy key does both: a ruleset can let it bypass the
+required check, and its push starts the deploy. It does not expire, which is
+what an unattended job needs (ADR-0012).
 
-[i38]: https://github.com/Zednicek-Adam/cz-electricity-price-forecast/issues/38
+Generate a key pair outside the repository, register the public half with write
+access, store the private half, and delete it locally:
+
+```sh
+ssh-keygen -t ed25519 -N "" -C "cz-epf daily run" -f daily
+gh repo deploy-key add daily.pub --allow-write \
+  --title "daily run (pushes data commits to main)"
+gh secret set DEPLOY_KEY --env production < daily
+rm daily daily.pub
+```
+
+Branch protection on `main` is a **ruleset** rather than a classic protection
+rule, because only a ruleset can name a deploy key as a bypass actor. The
+ruleset `main` blocks deletion and force-pushes and requires `all-green` from
+GitHub Actions; deploy keys and repository admins may bypass it. Create it with
+`gh api -X POST repos/{owner}/{repo}/rulesets --input ruleset.json`, where
+`ruleset.json` is:
+
+```json
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["~DEFAULT_BRANCH"], "exclude": [] } },
+  "bypass_actors": [
+    { "actor_type": "DeployKey", "bypass_mode": "always" },
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ],
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "required_status_checks", "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [ { "context": "all-green", "integration_id": 15368 } ] } }
+  ]
+}
+```
+
+A classic protection rule on `main` would apply on top of the ruleset and
+reject the deploy key, so there must not be one:
+`gh api repos/{owner}/{repo}/branches/main/protection` answers 404.
+
+**Verify:** `gh api repos/{owner}/{repo}/rules/branches/main -q '.[].type'`
+lists `deletion`, `non_fast_forward` and `required_status_checks`, and the
+first daily run that has something to commit pushes it to `main`.

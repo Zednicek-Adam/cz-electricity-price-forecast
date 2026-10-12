@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by ADR-0016
 ---
 
 # v1 is four units across three vendors, and the request path never computes

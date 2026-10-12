@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by ADR-0016
 ---
 
 # Ingest reconciles gaps, and the daily run forecasts two days out
