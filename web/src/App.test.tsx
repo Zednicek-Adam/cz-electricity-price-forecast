@@ -41,6 +41,15 @@ function click(name: string | RegExp): void {
   fireEvent.click(screen.getByRole("button", { name }));
 }
 
+/** The chart views' history switch. */
+function history(name: string): void {
+  fireEvent.click(
+    within(screen.getByRole("group", { name: "History" })).getByRole("button", {
+      name,
+    }),
+  );
+}
+
 function tab(name: string): void {
   fireEvent.click(screen.getByRole("tab", { name }));
 }
@@ -291,11 +300,12 @@ describe("the Over time view", () => {
   });
 });
 
-describe("the 30-day view", () => {
-  test("draws the trailing metric, and the headline numbers reframe to the last 30 days", async () => {
+describe("the history switch", () => {
+  test("turns Over time to the trailing metric, and the headline numbers to the last 30 days", async () => {
     await openDay();
+    tab("Over time");
 
-    tab("30 days");
+    history("Last 30 days");
 
     await heroTitle("30-day MAE");
     const chart = await screen.findByRole("img", {
@@ -311,17 +321,160 @@ describe("the 30-day view", () => {
     ).toBeTruthy();
   });
 
-  test("shares its metric with the Over time view", async () => {
+  test("carries across Over time, By weekday and By hour, and leaves the scoreboard alone", async () => {
     await openDay();
-    tab("30 days");
+    tab("By weekday");
+
+    history("Last 30 days");
+
+    await screen.findByRole("img", {
+      name: /over the last 30 days, by weekday/,
+    });
+    expect(
+      screen.getByText("Last 30 days · 2023-12-05 – 2024-01-03", {
+        selector: ".eyebrow",
+      }),
+    ).toBeTruthy();
+    tab("By hour");
+    await screen.findByRole("img", {
+      name: /over the last 30 days, by period/,
+    });
+    tab("Over time");
+    await heroTitle("30-day MAE");
+    const scope = screen.getByRole("group", { name: "Scope" });
+    expect(
+      within(scope)
+        .getByRole("button", { name: "Whole record" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  test("pools the profiles over the last 30 days", async () => {
+    await openDay();
+    tab("By weekday");
+    history("Last 30 days");
+    const chart = await screen.findByRole("img", { name: /by weekday/ });
+
+    const column = chart.querySelector('[data-bucket="6"]');
+    if (!column) throw new Error("no column for Sunday");
+    fireEvent.mouseEnter(column);
+
+    const tooltip = screen.getByText("Sunday").parentElement;
+    expect(tooltip?.textContent).toContain("Chronos-236.0");
+  });
+
+  test("offers the last 7 days to the chart views, and not to the scoreboard", async () => {
+    await openDay();
+    tab("Over time");
+    const options = (name: string) =>
+      within(screen.getByRole("group", { name }))
+        .getAllByRole("button")
+        .map((b) => b.textContent);
+    expect(options("History")).toEqual([
+      "Whole record",
+      "Last 30 days",
+      "Last 7 days",
+    ]);
+    expect(options("Scope")).toEqual(["Whole record", "Last 30 days"]);
+
+    history("Last 7 days");
+
+    await heroTitle("7-day MAE");
+    await screen.findByRole("img", {
+      name: /^MAE over the trailing 7 days of Chronos-2, AR-168, Naïve/,
+    });
+    expect(headline("Chronos-2")).toBe("12.3 EUR/MWh");
+    expect(
+      screen.getByText("Last 7 days · 2023-12-28 – 2024-01-03", {
+        selector: ".tiles-caption",
+      }),
+    ).toBeTruthy();
+  });
+
+  test("pools the profiles over the last 7 days", async () => {
+    await openDay();
+    tab("By hour");
+    history("Last 7 days");
+    const chart = await screen.findByRole("img", {
+      name: /over the last 7 days, by period/,
+    });
+
+    const column = chart.querySelector('[data-bucket="0"]');
+    if (!column) throw new Error("no column for period 1");
+    fireEvent.mouseEnter(column);
+
+    const tooltip = screen.getByText("Period 1").parentElement;
+    expect(tooltip?.textContent).toContain("Chronos-240.0");
+  });
+
+  test("shares the metric between the chart views", async () => {
+    await openDay();
+    tab("Over time");
+    history("Last 30 days");
 
     fireEvent.click(metricButton("SMAPE"));
     await screen.findByRole("img", {
       name: /^SMAPE over the trailing 30 days/,
     });
 
-    tab("Over time");
+    history("Whole record");
     await screen.findByRole("img", { name: /^Running SMAPE/ });
+  });
+});
+
+describe("the By weekday view", () => {
+  test("draws each model's metric over the whole record, Monday to Sunday", async () => {
+    await openDay();
+
+    tab("By weekday");
+
+    await heroTitle("MAE by weekday");
+    const chart = await screen.findByRole("img", {
+      name: "MAE of Chronos-2, AR-168, Naïve over the whole record, by weekday, Monday to Sunday.",
+    });
+    expect(within(chart).queryByText("Observed")).toBeNull();
+    for (const day of ["Mon", "Sun"]) {
+      expect(within(chart).getAllByText(day).length).toBeGreaterThan(0);
+    }
+    expect(
+      screen.getByText("Whole record · 2023-12-30 – 2024-01-03", {
+        selector: ".eyebrow",
+      }),
+    ).toBeTruthy();
+  });
+
+  test("reads out every model on the weekday under the pointer", async () => {
+    await openDay();
+    tab("By weekday");
+    const chart = await screen.findByRole("img", { name: /by weekday/ });
+
+    const column = chart.querySelector('[data-bucket="6"]');
+    if (!column) throw new Error("no column for Sunday");
+    fireEvent.mouseEnter(column);
+
+    const tooltip = screen.getByText("Sunday").parentElement;
+    expect(tooltip?.textContent).toContain("Chronos-226.0");
+    expect(tooltip?.textContent).toContain("Naïve36.0");
+  });
+});
+
+describe("the By hour view", () => {
+  test("draws each model's metric at each period ordinal, and shares the trend views' metric", async () => {
+    await openDay();
+    tab("Over time");
+    fireEvent.click(metricButton("rMAE"));
+
+    tab("By hour");
+
+    await heroTitle("rMAE by hour");
+    const chart = await screen.findByRole("img", {
+      name: "rMAE of Chronos-2, AR-168, Naïve over the whole record, by period ordinal 1 to 24.",
+    });
+    const column = chart.querySelector('[data-bucket="23"]');
+    if (!column) throw new Error("no column for period 24");
+    fireEvent.mouseEnter(column);
+    const tooltip = screen.getByText("Period 24").parentElement;
+    expect(tooltip?.textContent).toContain("AR-1680.480");
   });
 });
 
@@ -332,7 +485,8 @@ describe("the view tabs", () => {
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Day",
       "Over time",
-      "30 days",
+      "By weekday",
+      "By hour",
     ]);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
 
@@ -344,7 +498,7 @@ describe("the view tabs", () => {
 
     fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
     fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
-    await heroTitle("30-day MAE");
+    await heroTitle("MAE by hour");
   });
 });
 

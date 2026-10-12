@@ -1,13 +1,17 @@
 /**
- * The dashboard (ADR-0007, ADR-0017): one hero chart with three views behind
- * tabs, then the scoreboard.
+ * The dashboard (ADR-0007, ADR-0017, ADR-0018): one hero chart with four views
+ * behind tabs, then the scoreboard.
  *
  * - **Day** — one delivery day's prices. Its metric selector sits in the
  *   day's accuracy panel beneath the chart, because there it rescores the
  *   day, the ribbon and the day navigator and never the chart.
- * - **Over time** and **30 days** — the running and the trailing metric. Their
- *   shared metric selector sits in the chart's own bar, because there it
- *   redraws the chart.
+ * - **Over time** — the running metric over the whole record, or the trailing
+ *   30-day or 7-day metric.
+ * - **By weekday** and **By hour** — the metric per weekday and per period
+ *   ordinal, over the whole record or the last 30 or 7 days.
+ *
+ *   These three views share two switches in the chart's own bar, the history
+ *   and the metric, because there they redraw the chart.
  * - **Scoreboard** — the accuracy table and the Diebold–Mariano card, under one
  *   scope switch: the whole record or the last 30 days.
  *
@@ -28,6 +32,7 @@ import {
   deliveryDay,
   HEADLINE_MODEL,
   metricOverTime,
+  metricProfile,
 } from "./dashboard.ts";
 import { DayChart } from "./DayChart.tsx";
 import { DateStepper, DayJumps } from "./DayNavigator.tsx";
@@ -42,45 +47,47 @@ import {
   MODEL_LABELS,
   SCOPE_LABELS,
 } from "./presentation.ts";
+import { ProfileChart } from "./ProfileChart.tsx";
 import { isStale, todayInPrague } from "./record.ts";
 import { Ribbon } from "./Ribbon.tsx";
 import { Segmented } from "./Segmented.tsx";
 import type {
   Dashboard,
   DeliveryDate,
+  History,
   Metric,
   ModelSlug,
+  Profile,
   Scope,
 } from "./types.ts";
 
-type View = "day" | "overTime" | "trailing";
+type View = "day" | "overTime" | Profile;
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "day", label: "Day" },
   { id: "overTime", label: "Over time" },
-  { id: "trailing", label: "30 days" },
+  { id: "weekday", label: "By weekday" },
+  { id: "period", label: "By hour" },
 ];
 
 const SCOPES: readonly Scope[] = ["whole", "window"];
+const HISTORIES: readonly History[] = ["whole", "window", "week"];
 
 export function App({ data }: { data: Dashboard }) {
-  const { record, models, window } = data;
+  const { record, models } = data;
   const [view, setView] = useState<View>("day");
   // Two metric selectors, two choices: the Day view's scores the day, the
-  // trend views' draws the chart (ADR-0017).
+  // other views' draws the chart (ADR-0017).
   const [dayMetric, setDayMetric] = useState<Metric>("mae");
-  const [trendMetric, setTrendMetric] = useState<Metric>("mae");
+  const [chartMetric, setChartMetric] = useState<Metric>("mae");
+  // The history the chart views cover, separate from the scoreboard's scope
+  // (ADR-0018).
+  const [history, setHistory] = useState<History>("whole");
   // The Day view opens on the record's last day, the pending forecast while
   // there is one, rather than on a day picked for how it looks.
   const [deliveryDate, setDeliveryDate] = useState<DeliveryDate>(record.last);
   const [dmModel, setDmModel] = useState<ModelSlug>(HEADLINE_MODEL);
   const [scope, setScope] = useState<Scope>("whole");
-
-  const scored = data.running.dates;
-  const scopeRange =
-    scope === "whole"
-      ? `${scored[0] ?? record.first} – ${scored.at(-1) ?? record.last}`
-      : `${window.first} – ${window.last}`;
 
   function openDay(day: DeliveryDate): void {
     setDeliveryDate(day);
@@ -133,12 +140,22 @@ export function App({ data }: { data: Dashboard }) {
                 onMetric={setDayMetric}
                 onPick={setDeliveryDate}
               />
-            ) : (
+            ) : view === "overTime" ? (
               <TrendView
                 data={data}
-                kind={view === "overTime" ? "running" : "trailing"}
-                metric={trendMetric}
-                onMetric={setTrendMetric}
+                scope={history}
+                onScope={setHistory}
+                metric={chartMetric}
+                onMetric={setChartMetric}
+              />
+            ) : (
+              <ProfileView
+                data={data}
+                by={view}
+                scope={history}
+                onScope={setHistory}
+                metric={chartMetric}
+                onMetric={setChartMetric}
               />
             )}
           </div>
@@ -149,7 +166,7 @@ export function App({ data }: { data: Dashboard }) {
             <div>
               <h2 id="scoreboard-title">Scoreboard</h2>
               <p className="subtle">
-                {SCOPE_LABELS[scope]} · {scopeRange}
+                {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
               </p>
             </div>
             <Segmented
@@ -186,7 +203,7 @@ export function App({ data }: { data: Dashboard }) {
   );
 }
 
-/** The hero chart's three views, as a tab list with arrow-key navigation. */
+/** The hero chart's four views, as a tab list with arrow-key navigation. */
 function ViewTabs({
   view,
   onChange,
@@ -296,21 +313,48 @@ function DayView({ data, date, metric, onMetric, onPick }: DayViewProps) {
   );
 }
 
-interface TrendViewProps {
+/** The days a scope covers, first – last. */
+function scopeRange(data: Dashboard, scope: History): string {
+  if (scope !== "whole") return `${data[scope].first} – ${data[scope].last}`;
+  const scored = data.running.dates;
+  return `${scored[0] ?? data.record.first} – ${scored.at(-1) ?? data.record.last}`;
+}
+
+interface ChartViewProps {
   data: Dashboard;
-  kind: "running" | "trailing";
+  scope: History;
+  onScope: (scope: History) => void;
   metric: Metric;
   onMetric: (metric: Metric) => void;
 }
 
-function TrendView({ data, kind, metric, onMetric }: TrendViewProps) {
-  const series = metricOverTime(data, kind, metric);
+/** The chart views' two switches, in the chart's bar because both redraw it:
+ * how much history the chart covers, and the metric. */
+function ChartSwitches({ scope, onScope, metric, onMetric }: ChartViewProps) {
+  return (
+    <div className="chart-switches">
+      <Segmented
+        label="History"
+        options={HISTORIES}
+        value={scope}
+        onChange={onScope}
+        name={(s) => SCOPE_LABELS[s]}
+      />
+      <MetricSelector metric={metric} onChange={onMetric} />
+    </div>
+  );
+}
+
+/** Over time: over the whole record the running metric, over the last 30 or
+ * 7 days the trailing one, across the whole record. */
+function TrendView(props: ChartViewProps) {
+  const { data, scope, metric } = props;
+  const running = scope === "whole";
+  const series = metricOverTime(data, scope, metric);
   const { label } = METRIC_PRESENTATION[metric];
-  const scored = data.running.dates;
-  const running = kind === "running";
   // The tiles are the lines' last points: the whole record, or the last
   // window, each as published.
-  const figures = accuracy(data, running ? "whole" : "window");
+  const figures = accuracy(data, scope);
 
   return (
     <>
@@ -319,20 +363,44 @@ function TrendView({ data, kind, metric, onMetric }: TrendViewProps) {
           <p className="eyebrow">
             {running
               ? "Running metric · from the first scored day"
-              : "Trailing 30-day window"}
+              : `Trailing ${series.days}-day window`}
           </p>
-          <h2>{running ? `${label} over time` : `30-day ${label}`}</h2>
+          <h2>
+            {running ? `${label} over time` : `${series.days}-day ${label}`}
+          </h2>
         </div>
-        <MetricSelector metric={metric} onChange={onMetric} />
+        <ChartSwitches {...props} />
       </div>
       <p className="subtle tiles-caption">
-        {running
-          ? `Whole record · ${scored[0] ?? ""} – ${scored.at(-1) ?? ""}`
-          : `Last 30 days · ${data.window.first} – ${data.window.last}`}
+        {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
       </p>
       <HeadlineNumbers metric={metric} figures={figures} />
       <Legend series={series.series.map((s) => s.model)} />
       <OverTimeChart series={series} />
+    </>
+  );
+}
+
+function ProfileView(props: ChartViewProps & { by: Profile }) {
+  const { data, by, scope, metric } = props;
+  const profile = metricProfile(data, by, scope, metric);
+  const { label } = METRIC_PRESENTATION[metric];
+
+  return (
+    <>
+      <div className="panel-bar">
+        <div>
+          <p className="eyebrow">
+            {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
+          </p>
+          <h2>
+            {label} by {by === "weekday" ? "weekday" : "hour"}
+          </h2>
+        </div>
+        <ChartSwitches {...props} />
+      </div>
+      <Legend series={profile.series.map((s) => s.model)} />
+      <ProfileChart profile={profile} />
     </>
   );
 }

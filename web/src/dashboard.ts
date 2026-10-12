@@ -10,10 +10,13 @@ import type {
   DeliveryDate,
   DeliveryDay,
   Figures,
+  History,
   Metric,
   ModelMetrics,
   MetricOverTime,
+  MetricProfile,
   ModelSlug,
+  Profile,
   Scope,
 } from "./types.ts";
 
@@ -64,15 +67,18 @@ export function dailyMetric(data: Dashboard, metric: Metric): DailyMetric {
   return { model: HEADLINE_MODEL, metric, deliveryDates, values };
 }
 
-/** The Over time view's running metric, or the 30-day view's trailing one. */
+/** The Over time view's running metric, over the whole record, or its
+ * trailing one, over the last 30 or 7 days. */
 export function metricOverTime(
   data: Dashboard,
-  kind: MetricOverTime["kind"],
+  history: History,
   metric: Metric,
 ): MetricOverTime {
-  const source = kind === "running" ? data.running : data.trailing;
+  const running = history === "whole";
+  const source = running ? data.running : data.trailing[history];
   return {
-    kind,
+    kind: running ? "running" : "trailing",
+    days: running ? null : data[history].days,
     metric,
     deliveryDates: data.running.dates,
     series: data.models.flatMap((model) => {
@@ -82,7 +88,25 @@ export function metricOverTime(
   };
 }
 
-export function accuracy(data: Dashboard, scope: Scope): ModelMetrics[] {
+/** The By weekday or By hour view's figures, over the scope's days. */
+export function metricProfile(
+  data: Dashboard,
+  by: Profile,
+  scope: History,
+  metric: Metric,
+): MetricProfile {
+  return {
+    by,
+    scope,
+    metric,
+    series: data.models.flatMap((model) => {
+      const values = data.profiles[scope][by][metric][model];
+      return values ? [{ model, values }] : [];
+    }),
+  };
+}
+
+export function accuracy(data: Dashboard, scope: History): ModelMetrics[] {
   return rows(data.models, data.accuracy[scope]);
 }
 

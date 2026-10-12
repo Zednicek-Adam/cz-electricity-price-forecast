@@ -142,13 +142,20 @@ and ADR-0016.
 _Avoid_: rolling, moving average, cumulative metric
 
 **Trailing metric**:
-An accuracy figure computed over every delivery period in the 30 calendar
-delivery days ending on a given delivery day, pooled exactly as the running
+An accuracy figure computed over every delivery period in the 30 (or, for the
+**week**, 7) calendar delivery days ending on a given delivery day, pooled exactly as the running
 metric pools, its rMAE likewise the ratio of two windowed MAEs. It has no value
 until a whole window fits inside the record. Where the running metric settles,
 the trailing metric keeps moving, so it shows how the models are doing now. See
 ADR-0017.
 _Avoid_: rolling average, moving average, 30-day mean
+
+**Profile**:
+A model's accuracy over the whole record, the window or the week, grouped by
+the weekday of the delivery day or by period ordinal. Each bucket pools its delivery periods as a
+published metric does, and its rMAE is the ratio of the model's MAE to the
+naïve's in the same bucket. See ADR-0018.
+_Avoid_: seasonality, breakdown, hourly metric
 
 **Window**:
 The last 30 calendar delivery days up to and including the last scored one.
@@ -156,6 +163,12 @@ With the **whole record**, it is one of the scoreboard's two **scopes**, and the
 scope sets which days the accuracy table and the Diebold–Mariano card cover.
 See ADR-0017.
 _Avoid_: recent period, last month
+
+**Week**:
+The last 7 calendar delivery days up to and including the last scored one.
+The history switch offers it; the scoreboard's scope switch does not. See
+ADR-0018.
+_Avoid_: last week (which suggests a calendar week)
 
 **Backtest**:
 A forecast run replayed over a delivery day whose observed price is already
@@ -265,24 +278,32 @@ _Avoid_: significance test, DM p-value (unqualified)
 
 ### The interface
 
-**Hero chart** — the single chart the dashboard leads with, carrying three
-views behind tabs: Day, Over time and 30 days (ADR-0007, ADR-0017). There is
-exactly one; a second chart competing with it is a design error, not a feature.
+**Hero chart** — the single chart the dashboard leads with, carrying four
+views behind tabs: Day, Over time, By weekday and By hour (ADR-0007, ADR-0017,
+ADR-0018). There is exactly one; a second chart competing with it is a design
+error, not a feature.
 _Avoid_: main chart, primary graph
 
 **Day view** — the hero chart showing the **observed price** against all three
 models over the 24 period ordinals of one delivery day, priced in EUR/MWh.
 
-**Over time view** — the hero chart showing the **running metric** for the three
-models across every scored delivery day. It carries no observed line: on a
-metric axis the observed price is the zero the metric is measured from, not a
-series.
-_Avoid_: history view, trend view
+**Over time view** — the hero chart showing the three models' metric across
+every scored delivery day: the **running metric** over the whole record, or the
+**trailing metric** with the history switch on the window or the week. It carries no
+observed line: on a metric axis the observed price is the zero the metric is
+measured from, not a series.
+_Avoid_: history view, trend view, 30-day view
 
-**30-day view** — the hero chart showing the **trailing metric** for the three
-models across every scored delivery day, with no observed line for the same
-reason as the Over time view.
-_Avoid_: rolling view, recent view
+**By weekday view** and **By hour view** — the hero chart showing each model's
+**profile**: one line per model of the selected metric, across the seven
+weekdays or the 24 period ordinals, over the history the switch selects.
+
+**History switch** — the control choosing between the **whole record**, the
+**window** and the **week** for the Over time, By weekday and By hour views
+together. It sits in
+the chart's bar and is separate from the scoreboard's **scope switch**
+(ADR-0018).
+_Avoid_: time filter, range picker
 
 **Ribbon** — the selected metric for the headline model on every replayed
 delivery day, drawn as one continuous filled area beneath the Day view. It is
@@ -301,9 +322,10 @@ function (ADR-0009). Removing them obliges making the ribbon a real slider.
 **Metric selector** — the control choosing between MAE, RMSE, SMAPE and rMAE.
 There are two, each placed beside what it changes (ADR-0017). The **Day view's**
 sits in the day's accuracy panel and governs the day's headline numbers, the
-ribbon and the day navigator, never the price chart. The **trend views'**, shared
-by Over time and 30 days, sits in the chart's bar and governs the chart and its
-headline numbers. The two are separate choices.
+ribbon and the day navigator, never the price chart. The other, shared by Over
+time, By weekday and By hour, sits in the chart's bar beside the history switch
+and governs the chart, and in Over time its headline numbers. The two are
+separate choices.
 
 **Scope switch** — the one control choosing between the **whole record** and the
 **window** for the accuracy table and the Diebold–Mariano card together, so the

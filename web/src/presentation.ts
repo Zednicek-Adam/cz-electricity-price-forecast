@@ -2,7 +2,7 @@
  * How the interface names, colours and formats things. Rendering rules only:
  * every figure arrives from the export already computed.
  */
-import type { DeliveryDate, Metric, ModelSlug, Scope } from "./types.ts";
+import type { DeliveryDate, History, Metric, ModelSlug } from "./types.ts";
 
 /** The benchmark is "Naïve" in the interface; the slug stays `daylag` (ADR-0007). */
 export const MODEL_LABELS: Record<ModelSlug, string> = {
@@ -54,11 +54,24 @@ export function formatPrice(value: number): string {
   return value.toFixed(2);
 }
 
-/** The scoreboard's two scopes, as its scope switch names them. */
-export const SCOPE_LABELS: Record<Scope, string> = {
+/** The scoreboard's two scopes and the history switch's three, as the
+ * switches name them. */
+export const SCOPE_LABELS: Record<History, string> = {
   whole: "Whole record",
   window: "Last 30 days",
+  week: "Last 7 days",
 };
+
+/** The weekday profile's buckets, in the export's order. */
+export const WEEKDAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
 
 const DAY_FORMAT = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",

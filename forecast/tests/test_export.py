@@ -56,8 +56,13 @@ def test_one_file_carries_every_view(tmp_path: Path, runs: list[StoredRun]) -> N
     running, trailing = dashboard["running"], dashboard["trailing"]
     for metric in ("mae", "rmse", "smape", "rmae"):
         assert len(running[metric]["daylag"]) == len(running["dates"]) == 1827
-        assert len(trailing[metric]["daylag"]) == 1827
+        assert len(trailing["window"][metric]["daylag"]) == 1827
+        assert len(trailing["week"][metric]["daylag"]) == 1827
     assert dashboard["accuracy"]["whole"]["daylag"]["rmae"] == 1.0
+    for scope in ("whole", "window", "week"):
+        profiles = dashboard["profiles"][scope]
+        assert profiles["weekday"]["rmae"]["daylag"] == [1.0] * 7
+        assert profiles["period"]["rmae"]["daylag"] == [1.0] * 24
     assert dashboard["comparisons"] == {
         "whole": {"daylag": {}},
         "window": {"daylag": {}},
@@ -74,7 +79,7 @@ def test_the_window_is_the_last_thirty_scored_days(
         "first": "2024-12-02",
         "last": "2024-12-31",
     }
-    trailing = dashboard["trailing"]["mae"]["daylag"]
+    trailing = dashboard["trailing"]["window"]["mae"]["daylag"]
     # No figure until a whole window fits, then one on every day.
     assert trailing[:29] == [None] * 29
     assert None not in trailing[29:]
@@ -82,6 +87,24 @@ def test_the_window_is_the_last_thirty_scored_days(
     window = dashboard["accuracy"]["window"]["daylag"]
     assert trailing[-1] == pytest.approx(window["mae"], rel=1e-5)
     assert window["rmae"] == 1.0
+
+
+def test_the_week_is_the_last_seven_scored_days(
+    tmp_path: Path, runs: list[StoredRun]
+) -> None:
+    dashboard = exported(tmp_path, runs)
+
+    assert dashboard["week"] == {"days": 7, "first": "2024-12-25", "last": "2024-12-31"}
+    trailing = dashboard["trailing"]["week"]["mae"]["daylag"]
+    assert trailing[:6] == [None] * 6
+    assert None not in trailing[6:]
+    week = dashboard["accuracy"]["week"]["daylag"]
+    assert trailing[-1] == pytest.approx(week["mae"], rel=1e-5)
+    # Each weekday of the week is one delivery day.
+    tuesday = dashboard["days"]["2024-12-31"]["metrics"]["daylag"]["mae"]
+    weekday = dashboard["profiles"]["week"]["weekday"]["mae"]["daylag"]
+    assert weekday[1] == pytest.approx(tuesday, rel=1e-5)
+    assert set(dashboard["comparisons"]) == {"whole", "window"}
 
 
 def test_a_day_carries_the_observed_price_forecasts_and_metrics(

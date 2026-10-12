@@ -1,12 +1,14 @@
 /**
- * The hero chart's two metric views, across every scored delivery day:
+ * The hero chart's Over time view, across every scored delivery day, in either
+ * position of its history switch (ADR-0018):
  *
- * - **Over time** — the running metric (ADR-0007). Each point is the metric
+ * - **Whole record** — the running metric (ADR-0007). Each point is the metric
  *   over every delivery period from 2020-01-01 up to that day, so the line is
  *   a whole-record figure settling, not a day being scored.
- * - **30 days** — the trailing metric (ADR-0017). Each point is the metric
- *   over the 30 delivery days ending on that day, so the line moves with how
- *   the models are doing now, and the first 29 days have no point.
+ * - **Last 30 days** and **Last 7 days** — the trailing metric (ADR-0017,
+ *   ADR-0018). Each point is the metric over the 30 or 7 delivery days ending
+ *   on that day, so the line moves with how the models are doing now, and the
+ *   first 29 or 6 days have no point.
  *
  * There is no observed line: on a metric axis the observed price is the zero
  * the metric is measured from. Every point is drawn, as SVG, with no
@@ -70,7 +72,7 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
   const described =
     kind === "running"
       ? `Running ${metricLabel}`
-      : `${metricLabel} over the trailing 30 days`;
+      : `${metricLabel} over the trailing ${series.days} days`;
 
   function track(event: MouseEvent<SVGSVGElement>): void {
     const box = event.currentTarget.getBoundingClientRect();
@@ -193,7 +195,7 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
             title={
               kind === "running"
                 ? `Through ${days[hovered]}`
-                : `30 days to ${days[hovered]}`
+                : `${series.days} days to ${days[hovered]}`
             }
             at={x(hovered) / WIDTH}
             rows={series.series.map((s) => ({

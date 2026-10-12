@@ -1,4 +1,4 @@
-"""Published metrics, the running metric and Diebold-Mariano, on small
+"""Published metrics, the running metric, the profiles and Diebold-Mariano, on small
 in-memory records (seam 2).
 
 Repaired observed prices and forecasts are made directly, with errors chosen
@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from forecast.forecasts import RunType, StoredRun
@@ -19,6 +20,7 @@ from forecast.metrics import (
     DayFigure,
     MetricRow,
     model_comparisons,
+    profile,
     published_metrics,
     running,
     scored_forecasts,
@@ -37,6 +39,7 @@ class Record:
         self.runs: list[StoredRun] = []
         self.metrics: list[MetricRow] = []
         self.comparisons: list[ComparisonRow] = []
+        self.scored = pd.DataFrame()
 
     def observe(self, day: date, prices: list[float]) -> None:
         self.observed += [
@@ -64,9 +67,9 @@ class Record:
         )
 
     def rebuild(self) -> None:
-        scored = scored_forecasts(self.runs, self.observed)
-        self.metrics = published_metrics(scored)
-        self.comparisons = model_comparisons(scored)
+        self.scored = scored_forecasts(self.runs, self.observed)
+        self.metrics = published_metrics(self.scored)
+        self.comparisons = model_comparisons(self.scored)
 
 
 def metric(
@@ -409,3 +412,31 @@ def test_the_trailing_window_counts_calendar_days_not_scored_days() -> None:
     values = trailing("mae", days, holed, days=2)
 
     assert values == [None, 1.5, 2.0, 4.0]
+
+
+def test_the_weekday_profile_pools_each_weekday_from_monday(two_days: Record) -> None:
+    # DAY_1 is a Wednesday, DAY_2 a Thursday.
+    figures = profile(two_days.scored, "weekday")
+
+    assert figures["mae"]["ar168"] == [None, None, 2.0, 3.0, None, None, None]
+    assert figures["rmae"]["ar168"][2:4] == [0.5, 0.375]
+    assert figures["rmae"]["daylag"][2:4] == [1.0, 1.0]
+
+
+def test_the_period_profile_pools_each_period_ordinal_across_days(
+    record: Record,
+) -> None:
+    # Period 1 misses by 2 then by 4; every other period is exact.
+    record.observe(DAY_1, [10.0] * 24)
+    record.observe(DAY_2, [10.0] * 24)
+    record.forecast("ar168", DAY_1, [12.0] + [10.0] * 23)
+    record.forecast("ar168", DAY_2, [14.0] + [10.0] * 23)
+    record.forecast("daylag", DAY_1, [11.0] * 24)
+    record.forecast("daylag", DAY_2, [11.0] * 24)
+    record.rebuild()
+
+    figures = profile(record.scored, "period")
+
+    assert figures["mae"]["ar168"] == [3.0] + [0.0] * 23
+    assert figures["rmse"]["ar168"][0] == pytest.approx(math.sqrt((4 + 16) / 2))
+    assert figures["rmae"]["ar168"] == [3.0] + [0.0] * 23

@@ -4,7 +4,14 @@
  * that ignores the selected metric lands wrong. A variant carries a pending
  * day after them.
  */
-import type { Dashboard, Day, Figures, Metric, ModelSlug } from "./types.ts";
+import type {
+  Dashboard,
+  Day,
+  Figures,
+  Metric,
+  MetricSeriesByModel,
+  ModelSlug,
+} from "./types.ts";
 
 export const DAYS = [
   "2024-12-27",
@@ -74,12 +81,48 @@ function running(metric: Metric): Record<ModelSlug, number[]> {
   return { chronos2: series(0), ar168: series(1), daylag: series(2) };
 }
 
-/** The trailing series has no figure until a whole window fits. */
-function trailing(metric: Metric): Record<ModelSlug, (number | null)[]> {
+/** A trailing series has no figure until a whole span fits: the window's
+ * from day 2, the week's from day 1, reading 10 lower. */
+function trailing(
+  metric: Metric,
+  from: number,
+  base: number,
+): Record<ModelSlug, (number | null)[]> {
   const scale = metric === "rmae" ? 0.01 : 1;
   const series = (k: number) =>
-    RUNNING_DAYS.map((_, i) => (i < 2 ? null : (30 + k * 5 - i) * scale));
+    RUNNING_DAYS.map((_, i) => (i < from ? null : (base + k * 5 - i) * scale));
   return { chronos2: series(0), ar168: series(1), daylag: series(2) };
+}
+
+function trailingSpan(from: number, base: number): MetricSeriesByModel {
+  return {
+    mae: trailing("mae", from, base),
+    rmse: trailing("rmse", from, base),
+    smape: trailing("smape", from, base),
+    rmae: trailing("rmae", from, base),
+  };
+}
+
+/** A profile's figures: bucket `i` of model `k` reads 20 + 5k + i, plus
+ * `shift` over the last 30 or 7 days, and rMAE a hundredth of that. */
+function profile(
+  count: number,
+  metric: Metric,
+  shift: number,
+): Record<ModelSlug, number[]> {
+  const scale = metric === "rmae" ? 0.01 : 1;
+  const series = (k: number) =>
+    Array.from({ length: count }, (_, i) => (20 + shift + k * 5 + i) * scale);
+  return { chronos2: series(0), ar168: series(1), daylag: series(2) };
+}
+
+function profiles(count: number, shift: number): MetricSeriesByModel {
+  return {
+    mae: profile(count, "mae", shift),
+    rmse: profile(count, "rmse", shift),
+    smape: profile(count, "smape", shift),
+    rmae: profile(count, "rmae", shift),
+  };
 }
 
 const WHOLE: Record<ModelSlug, Figures> = {
@@ -93,6 +136,13 @@ const WINDOW: Record<ModelSlug, Figures> = {
   chronos2: { mae: 31.77, rmse: 44.7, smape: 29.7, rmae: 0.669 },
   ar168: { mae: 30.2, rmse: 43.1, smape: 28.4, rmae: 0.636 },
   daylag: { mae: 47.5, rmse: 64.0, smape: 42.9, rmae: 1 },
+};
+
+/** The last 7 days. */
+const WEEK: Record<ModelSlug, Figures> = {
+  chronos2: { mae: 12.34, rmse: 18.0, smape: 15.5, rmae: 0.5 },
+  ar168: { mae: 18.5, rmse: 25.0, smape: 19.0, rmae: 0.75 },
+  daylag: { mae: 24.68, rmse: 33.0, smape: 27.0, rmae: 1 },
 };
 
 function comparisons(
@@ -118,14 +168,15 @@ export const DASHBOARD: Dashboard = {
     smape: running("smape"),
     rmae: running("rmae"),
   },
-  trailing: {
-    mae: trailing("mae"),
-    rmse: trailing("rmse"),
-    smape: trailing("smape"),
-    rmae: trailing("rmae"),
-  },
+  trailing: { window: trailingSpan(2, 30), week: trailingSpan(1, 20) },
   window: { days: 30, first: "2023-12-05", last: "2024-01-03" },
-  accuracy: { whole: WHOLE, window: WINDOW },
+  week: { days: 7, first: "2023-12-28", last: "2024-01-03" },
+  profiles: {
+    whole: { weekday: profiles(7, 0), period: profiles(24, 0) },
+    window: { weekday: profiles(7, 10), period: profiles(24, 10) },
+    week: { weekday: profiles(7, 20), period: profiles(24, 20) },
+  },
+  accuracy: { whole: WHOLE, window: WINDOW, week: WEEK },
   comparisons: {
     whole: {
       chronos2: comparisons("chronos2"),
