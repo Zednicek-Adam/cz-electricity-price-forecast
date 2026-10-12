@@ -12,7 +12,7 @@
  * other, with no note, and negative prices are drawn as they cleared. The
  * pending day has no observed line: its price is not published yet.
  */
-import type { DeliveryDayResponse, ModelSlug } from "./types.ts";
+import type { DeliveryDay, ModelSlug } from "./types.ts";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
@@ -33,7 +33,7 @@ interface Series {
   prices: number[];
 }
 
-export function DayChart({ day }: { day: DeliveryDayResponse }) {
+export function DayChart({ day }: { day: DeliveryDay }) {
   const [hovered, setHovered] = useState<number | null>(null);
 
   const series: Series[] = [

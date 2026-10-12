@@ -1,9 +1,11 @@
 /**
- * Calendar helpers for the record, whose extent arrives in `record.json`: it
+ * Calendar helpers for the record, whose extent arrives in `dashboard.json`: it
  * opens 2020-01-01, forced by AR-168's 730-day history against prices from
  * 2018-01-01, and grows by a delivery day with each daily run (ADR-0016).
  */
-import type { DeliveryDate, RecordResponse } from "./types.ts";
+import type { Dashboard, DeliveryDate } from "./types.ts";
+
+type Record = Dashboard["record"];
 
 /** The delivery day `n` calendar days from `day`. Calendar arithmetic on the
  * date alone, so a daylight-saving change cannot skip or repeat a day. */
@@ -13,7 +15,7 @@ export function addDays(day: DeliveryDate, n: number): DeliveryDate {
   return date.toISOString().slice(0, 10);
 }
 
-export function inRecord(record: RecordResponse, day: DeliveryDate): boolean {
+export function inRecord(record: Record, day: DeliveryDate): boolean {
   return day >= record.first && day <= record.last;
 }
 
@@ -31,7 +33,7 @@ export function todayInPrague(now: Date = new Date()): DeliveryDate {
  * it with the next one; a pending day that is today or earlier was never
  * replaced.
  */
-export function isStale(record: RecordResponse, today: DeliveryDate): boolean {
+export function isStale(record: Record, today: DeliveryDate): boolean {
   return record.pending !== null && record.pending <= today;
 }
 

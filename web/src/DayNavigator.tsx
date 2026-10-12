@@ -9,21 +9,17 @@
  * metric on the page a larger figure is a worse day.
  */
 import { addDays, inRecord } from "./record.ts";
-import type {
-  DailyMetricResponse,
-  DeliveryDate,
-  RecordResponse,
-} from "./types.ts";
+import type { DailyMetric, Dashboard, DeliveryDate } from "./types.ts";
 
 interface Props {
-  record: RecordResponse;
+  record: Dashboard["record"];
   day: DeliveryDate;
-  daily: DailyMetricResponse | null;
+  daily: DailyMetric;
   onPick: (day: DeliveryDate) => void;
 }
 
 function extreme(
-  daily: DailyMetricResponse,
+  daily: DailyMetric,
   better: (a: number, b: number) => boolean,
 ): DeliveryDate | undefined {
   let found: number | undefined;
@@ -36,9 +32,9 @@ function extreme(
 }
 
 export function DayNavigator({ record, day, daily, onPick }: Props) {
-  const worst = daily && extreme(daily, (a, b) => a > b);
-  const best = daily && extreme(daily, (a, b) => a < b);
-  const days = daily?.deliveryDates ?? [];
+  const worst = extreme(daily, (a, b) => a > b);
+  const best = extreme(daily, (a, b) => a < b);
+  const days = daily.deliveryDates;
 
   return (
     <div className="navigator">

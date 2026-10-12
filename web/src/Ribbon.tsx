@@ -10,7 +10,7 @@
  * (ADR-0009). Each day has an invisible column under one delegated click
  * handler, so the pointer maps to a day without layout arithmetic.
  */
-import type { DailyMetricResponse, DeliveryDate } from "./types.ts";
+import type { DailyMetric, DeliveryDate } from "./types.ts";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { AreaClosed, LinePath } from "@visx/shape";
@@ -24,7 +24,7 @@ const HEIGHT = 88;
 const MARGIN = { top: 8, right: 6, bottom: 16, left: 6 };
 
 interface Props {
-  daily: DailyMetricResponse;
+  daily: DailyMetric;
   selected: DeliveryDate;
   onPick: (day: DeliveryDate) => void;
 }

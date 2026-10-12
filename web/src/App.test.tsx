@@ -1,7 +1,7 @@
 /**
- * Seam 4: the real dashboard rendered in a DOM, with real visx, stubbing only
- * the network with files shaped by `types.ts` (`fixture.ts`). The tests do
- * what a visitor does and assert on what a visitor sees.
+ * Seam 4: the real dashboard rendered in a DOM, with real visx, handed the
+ * fixture record (`fixture.ts`) as `main.tsx` hands it the loaded file. The
+ * tests do what a visitor does and assert on what a visitor sees.
  */
 import {
   act,
@@ -11,48 +11,22 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { forgetResponses } from "./api.ts";
 import { App } from "./App.tsx";
-import {
-  PENDING_DAY,
-  payloadFor,
-  RECORD,
-  RECORD_WITH_PENDING,
-} from "./fixture.ts";
+import { loadDashboard } from "./dashboard.ts";
+import { DASHBOARD, DASHBOARD_WITH_PENDING, PENDING_DAY } from "./fixture.ts";
 import { REPOSITORY_URL } from "./Footer.tsx";
-import type { RecordResponse } from "./types.ts";
 
 /** The Day view opens on the record's last day. */
-const OPENING_DAY = RECORD.last;
-
-let record: RecordResponse = RECORD;
-
-const fetchStub = vi.fn((path: string) => {
-  const payload = payloadFor(path, record);
-  return Promise.resolve(
-    payload === undefined
-      ? new Response(null, { status: 404 })
-      : Response.json(payload),
-  );
-});
-
-beforeEach(() => {
-  vi.stubGlobal("fetch", fetchStub);
-});
+const OPENING_DAY = DASHBOARD.record.last;
 
 afterEach(() => {
-  record = RECORD;
   cleanup();
-  forgetResponses();
-  fetchStub.mockClear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-
-const requested = () => fetchStub.mock.calls.map(([path]) => path);
 
 /** The headline figure shown for a model: the definition after its term. */
 function headline(model: string): string {
@@ -72,7 +46,7 @@ async function heroTitle(text: string): Promise<void> {
 
 /** The Day view, loaded, with the day's figures on screen. */
 async function openDay(): Promise<void> {
-  render(<App />);
+  render(<App data={DASHBOARD} />);
   await screen.findByRole("img", { name: new RegExp(`^${OPENING_DAY}`) });
   await screen.findByRole("button", {
     name: "Worst day",
@@ -120,7 +94,7 @@ describe("the Day view", () => {
   });
 
   test("offers all four metrics and nothing else", () => {
-    render(<App />);
+    render(<App data={DASHBOARD} />);
 
     const buttons = within(
       screen.getByRole("group", { name: "Metric" }),
@@ -196,7 +170,7 @@ describe("the day navigator", () => {
   });
 
   test("clicking the ribbon jumps the Day view to that day", async () => {
-    const { container } = render(<App />);
+    const { container } = render(<App data={DASHBOARD} />);
     await screen.findByRole("img", { name: new RegExp(`^${OPENING_DAY}`) });
     const column = await vi.waitFor(() => {
       const found = container.querySelector('[data-day="2024-12-29"]');
@@ -211,7 +185,7 @@ describe("the day navigator", () => {
   });
 
   test("the stepper and the three buttons are native controls; the ribbon is not in the accessibility tree", async () => {
-    const { container } = render(<App />);
+    const { container } = render(<App data={DASHBOARD} />);
     await screen.findByRole("img", { name: new RegExp(`^${OPENING_DAY}`) });
     await screen.findByRole("button", {
       name: "Worst day",
@@ -260,23 +234,16 @@ describe("the Over time view", () => {
 
     await screen.findByRole("img", { name: /^Running rMAE/ });
     expect(headline("Naïve")).toBe("1.000");
-    expect(requested()).toContain("/data/running/rmae.json");
 
     click("Day");
-    await screen.findByRole("button", {
-      name: "Worst day",
-      disabled: false,
-    } as never);
-    await vi.waitFor(() =>
-      expect(requested()).toContain("/data/daily/rmae.json"),
-    );
+    click("Worst day");
+    await heroTitle("2024-12-30");
   });
 });
 
 describe("the pending day", () => {
   test("opens the Day view on the pending forecast, with no observed line and no figures", async () => {
-    record = RECORD_WITH_PENDING;
-    render(<App />);
+    render(<App data={DASHBOARD_WITH_PENDING} />);
 
     const chart = await screen.findByRole("img", {
       name: new RegExp(`^${PENDING_DAY}`),
@@ -290,10 +257,9 @@ describe("the pending day", () => {
   });
 
   test("says the daily run has stopped once the pending day is no longer ahead", async () => {
-    record = RECORD_WITH_PENDING;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2025-01-01T09:00:00Z"));
-    render(<App />);
+    render(<App data={DASHBOARD_WITH_PENDING} />);
 
     const warning = await screen.findByRole("status");
     expect(warning.textContent).toBe(
@@ -302,10 +268,9 @@ describe("the pending day", () => {
   });
 
   test("says nothing while the pending day is still ahead", async () => {
-    record = RECORD_WITH_PENDING;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2024-12-31T22:30:00Z")); // 23:30 in Prague
-    render(<App />);
+    render(<App data={DASHBOARD_WITH_PENDING} />);
 
     await screen.findByRole("img", { name: new RegExp(`^${PENDING_DAY}`) });
     expect(screen.queryByRole("status")).toBeNull();
@@ -314,7 +279,7 @@ describe("the pending day", () => {
 
 describe("the accuracy table", () => {
   test("is a semantic table of every model against four metrics, the naïve at 1.000", async () => {
-    render(<App />);
+    render(<App data={DASHBOARD} />);
 
     const table = await screen.findByRole("table");
     expect(
@@ -329,7 +294,7 @@ describe("the accuracy table", () => {
 
 describe("the Diebold–Mariano card", () => {
   test("plots the selected model against both opponents, with ±1.96 lines", async () => {
-    render(<App />);
+    render(<App data={DASHBOARD} />);
 
     const chart = await screen.findByRole("img", { name: /^Diebold–Mariano/ });
     expect(chart.getAttribute("aria-label")).toBe(
@@ -341,7 +306,7 @@ describe("the Diebold–Mariano card", () => {
   });
 
   test("choosing another model tests it against its own opponents", async () => {
-    render(<App />);
+    render(<App data={DASHBOARD} />);
     await screen.findByRole("img", { name: /^Diebold–Mariano/ });
 
     fireEvent.click(
@@ -358,7 +323,7 @@ describe("the Diebold–Mariano card", () => {
 
 describe("the page", () => {
   test("carries the ENTSO-E attribution and the repository link", () => {
-    render(<App />);
+    render(<App data={DASHBOARD} />);
 
     const footer = screen.getByRole("contentinfo");
     expect(footer.textContent).toContain(
@@ -373,36 +338,6 @@ describe("the page", () => {
     );
   });
 
-  test("fetches each payload once and never again, however long the tab stays open", async () => {
-    vi.useFakeTimers();
-    render(<App />);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
-    });
-
-    expect([...requested()].sort()).toEqual([
-      "/data/accuracy.json",
-      "/data/comparisons/chronos2.json",
-      "/data/daily/mae.json",
-      `/data/days/${OPENING_DAY}.json`,
-      "/data/record.json",
-    ]);
-  });
-
-  test("going back to a view already seen costs no request", async () => {
-    await openDay();
-    click("Over time");
-    await screen.findByRole("img", { name: /^Running MAE/ });
-    const before = requested().length;
-
-    click("Day");
-    await screen.findByRole("img", { name: new RegExp(`^${OPENING_DAY}`) });
-    click("Over time");
-    await screen.findByRole("img", { name: /^Running MAE/ });
-
-    expect(requested().length).toBe(before);
-  });
-
   test("says nothing it does not need to: no disclaimer, no banner", async () => {
     await openDay();
 
@@ -410,5 +345,23 @@ describe("the page", () => {
     for (const word of ["disclaimer", "backtest", "methodology", "not live"]) {
       expect(text).not.toContain(word);
     }
+  });
+});
+
+describe("loading the record", () => {
+  test("reads /dashboard.json once", async () => {
+    const fetchStub = vi.fn(() => Promise.resolve(Response.json(DASHBOARD)));
+    vi.stubGlobal("fetch", fetchStub);
+
+    expect(await loadDashboard()).toEqual(DASHBOARD);
+    expect(fetchStub.mock.calls).toEqual([["/dashboard.json"]]);
+  });
+
+  test("fails loudly when the file is missing", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(new Response(null, { status: 404 })),
+    );
+
+    await expect(loadDashboard()).rejects.toThrow("/dashboard.json: 404");
   });
 });

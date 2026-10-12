@@ -24,11 +24,20 @@ to be a refused `UPDATE`.
 
 **The dashboard is static files, generated at deploy time.** `forecast.export`
 reads both records, repairs the grid, computes every published metric, the
-running metric and the Diebold–Mariano tests, and writes one JSON file per view
-into `web/public/data/`, which Vite copies into the build. The Worker serves
-static assets only. Nothing derived is committed: every deploy rebuilds every
-file, so ADR-0010's "derived rows rebuild whole" holds with no code to keep it
-true.
+running metric and the Diebold–Mariano tests, and writes all of it into one
+file, `web/public/dashboard.json`, which Vite copies into the build. The page
+fetches that file once, before its first render, and every view selects what
+it draws from it; nothing on the page waits on the network after that. The
+Worker serves static assets only. Nothing derived is committed: every deploy
+rebuilds the file whole, so ADR-0010's "derived rows rebuild whole" holds with
+no code to keep it true.
+
+One file rather than one per view: the cutover to this design first wrote a
+file per former API endpoint, so each could be diffed against production, and
+the client kept an API client's machinery — a request cache, a loading state
+per view, a fetch that waited on another. The whole record is about 750 kB
+gzipped, growing by about 100 kB a year, and a visitor pays that once per
+deploy in exchange for a page that is plain synchronous data.
 
 **The daily run commits, and the commit deploys.** ADR-0011's run is
 `forecast.daily`: ingest appends the newly published delivery days, then every

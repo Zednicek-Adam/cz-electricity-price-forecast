@@ -1,23 +1,26 @@
-"""The export: both records in, every file the dashboard reads out (ADR-0016).
+"""The export: both records in, the one file the dashboard reads out (ADR-0016).
 
-    uv run python -m forecast.export [--out ../web/public/data]
+    uv run python -m forecast.export [--out ../web/public/dashboard.json]
 
 It reads `data/cz-day-ahead-prices.csv` and `data/forecasts.csv`, repairs the
 grid, computes every published metric, the running metric and the
-Diebold-Mariano tests, and writes one JSON file per view:
+Diebold-Mariano tests, and writes them into `dashboard.json`:
 
-| File                          | View                                     |
-|-------------------------------|------------------------------------------|
-| `record.json`                 | the record's extent and its pending day  |
-| `days/<delivery date>.json`   | the Day view                             |
-| `running/<metric>.json`       | the Over time view                       |
-| `daily/<metric>.json`         | the ribbon, and worst / best / random    |
-| `accuracy.json`               | the accuracy table                       |
-| `comparisons/<model>.json`    | the Diebold-Mariano card                 |
+    record       the first and last delivery day, and the pending day
+    models       the models in the record, in the order the dashboard lists them
+    days         per delivery day: the observed prices (null while pending),
+                 each model's 24 forecasts and its four metrics for the day
+    running      the scored delivery days, and per metric each model's running
+                 figure on them
+    accuracy     per model, the four metrics over the whole record
+    comparisons  per model and opponent, the Diebold-Mariano statistic by
+                 period ordinal (null where it could not be computed)
 
-Their shapes are `web/src/types.ts`. Nothing is written incrementally: every
-deploy runs the export and rebuilds every file whole, so the dashboard can never
-describe a forecast the record no longer holds (ADR-0010).
+Its shape is `Dashboard` in `web/src/types.ts`. Forecasts are rounded to the
+cent and figures to six significant digits: finer than anything on screen, and
+every figure is computed before rounding. The file is rebuilt whole on every
+deploy, so the dashboard can never describe a forecast the record no longer
+holds (ADR-0010).
 
 Before it writes, it checks the record and stops on the first failure:
 
@@ -31,7 +34,6 @@ Before it writes, it checks the record and stops on the first failure:
 import argparse
 import json
 import logging
-import shutil
 import sys
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
@@ -54,12 +56,10 @@ from forecast.models import ROSTER
 
 log = logging.getLogger("forecast.export")
 
-OUT = REPO_ROOT / "web" / "public" / "data"
+OUT = REPO_ROOT / "web" / "public" / "dashboard.json"
 
-# The roster in the order the dashboard lists it, and the model it leads with:
-# configuration, frozen (ADR-0003).
+# The roster in the order the dashboard lists it (ADR-0003).
 DISPLAY_ORDER = ("chronos2", "ar168", "daylag")
-HEADLINE_MODEL = "chronos2"
 
 # The replayed backtest every model must cover in full (ADR-0002).
 BACKTEST_FROM = date(2020, 1, 1)
@@ -84,13 +84,18 @@ def by_display_order(models: Iterable[str]) -> list[str]:
     return sorted(models, key=DISPLAY_ORDER.index)
 
 
+def figure(value: float | None) -> float | None:
+    """A computed figure, to six significant digits."""
+    return None if value is None else float(f"{value:.6g}")
+
+
 def export(
     out: Path = OUT,
     *,
     prices_path: Path = PRICES,
     forecasts_path: Path = FORECASTS,
 ) -> dict[str, Any]:
-    """Check the records and write every file. Returns `record.json`."""
+    """Check the records and write the dashboard's file. Returns its content."""
     repaired = repaired_prices(prices_path)
     runs = read_forecasts(forecasts_path)
     check(len(runs) > 0, f"{len(runs)} forecast runs")
@@ -102,9 +107,9 @@ def export(
     for run in runs:
         forecasts[run.delivery_date][run.model] = run
 
-    models = {run.model for run in runs}
-    check(models <= set(ROSTER), f"every model is on the roster: {sorted(models)}")
-    for model in sorted(models):
+    models = by_display_order({run.model for run in runs})
+    check(set(models) <= set(ROSTER), f"every model is on the roster: {models}")
+    for model in models:
         missing = [
             d
             for d in days_between(BACKTEST_FROM, BACKTEST_TO)
@@ -120,15 +125,6 @@ def export(
 
     scored = scored_forecasts(runs, repaired)
     metric_rows = published_metrics(scored)
-    comparison_rows = model_comparisons(scored)
-
-    naive_overall = [
-        r.value
-        for r in metric_rows
-        if (r.model, r.scope_type, r.metric) == (NAIVE, "overall", "rmae")
-    ]
-    reads = f"{naive_overall[0]:.3f}" if naive_overall else "nothing"
-    check(reads == "1.000", f"{NAIVE}: overall rMAE reads {reads}")
 
     # (model, metric) -> per-day figures, in delivery-day order.
     per_day: dict[tuple[str, str], list[DayFigure]] = defaultdict(list)
@@ -148,106 +144,78 @@ def export(
     for figures in per_day.values():
         figures.sort()
 
-    if out.exists():
-        shutil.rmtree(out)
-    first, last = min(forecasts), max(forecasts)
-    record = {
-        "first": first.isoformat(),
-        "last": last.isoformat(),
-        "pending": pending[0].isoformat() if pending else None,
-    }
-    _write(out / "record.json", record)
+    reads = f"{overall[NAIVE].get('rmae', float('nan')):.3f}"
+    check(reads == "1.000", f"{NAIVE}: overall rMAE reads {reads}")
 
-    for day in days_between(first, last):
-        _write(
-            out / "days" / f"{day.isoformat()}.json",
-            {
-                "deliveryDate": day.isoformat(),
-                "observed": observed.get(day),
-                "forecasts": [
-                    {"model": m, "prices": list(forecasts[day][m].prices)}
-                    for m in by_display_order(forecasts[day])
-                ],
-                "metrics": _model_metrics(day_metrics[day]),
+    def metrics_of(by_metric: dict[str, float]) -> dict[str, float | None]:
+        return {m: figure(by_metric.get(m)) for m in METRICS}
+
+    first, last = min(forecasts), max(forecasts)
+    days = {
+        day.isoformat(): {
+            "observed": observed.get(day),
+            "forecasts": {
+                m: [round(p, 2) for p in forecasts[day][m].prices]
+                for m in models
+                if m in forecasts[day]
             },
-        )
+            "metrics": {
+                m: metrics_of(day_metrics[day][m])
+                for m in models
+                if m in day_metrics[day]
+            },
+        }
+        for day in days_between(first, last)
+    }
 
     scored_days = sorted({f.delivery_date for fs in per_day.values() for f in fs})
+    running_figures: dict[str, Any] = {"dates": [d.isoformat() for d in scored_days]}
     for metric in METRICS:
         source = "mae" if metric == "rmae" else metric
-        _write(
-            out / "running" / f"{metric}.json",
-            {
-                "metric": metric,
-                "deliveryDates": [d.isoformat() for d in scored_days],
-                "series": [
-                    {
-                        "model": m,
-                        "values": running(
-                            metric,
-                            scored_days,
-                            per_day[m, source],
-                            per_day[NAIVE, "mae"],
-                        ),
-                    }
-                    for m in by_display_order(models)
-                ],
-            },
-        )
-        headline = per_day[HEADLINE_MODEL, metric]
-        _write(
-            out / "daily" / f"{metric}.json",
-            {
-                "model": HEADLINE_MODEL,
-                "metric": metric,
-                "deliveryDates": [f.delivery_date.isoformat() for f in headline],
-                "values": [f.value for f in headline],
-            },
-        )
+        running_figures[metric] = {
+            m: [
+                figure(v)
+                for v in running(
+                    metric, scored_days, per_day[m, source], per_day[NAIVE, "mae"]
+                )
+            ]
+            for m in models
+        }
 
-    _write(out / "accuracy.json", {"rows": _model_metrics(overall)})
+    comparisons: dict[str, dict[str, list[float | None]]] = {m: {} for m in models}
+    for c in model_comparisons(scored):
+        statistics = comparisons[c.model_a].setdefault(c.model_b, [None] * 24)
+        statistics[c.period_ordinal - 1] = figure(c.dm_statistic)
 
-    opponents: dict[str, dict[str, dict[str, list[float | None]]]] = defaultdict(dict)
-    for c in comparison_rows:
-        entry = opponents[c.model_a].setdefault(
-            c.model_b, {"dmStatistic": [None] * 24, "pValue": [None] * 24}
-        )
-        entry["dmStatistic"][c.period_ordinal - 1] = c.dm_statistic
-        entry["pValue"][c.period_ordinal - 1] = c.p_value
-    for model in DISPLAY_ORDER:
-        _write(
-            out / "comparisons" / f"{model}.json",
-            {
-                "model": model,
-                "opponents": [
-                    {"opponent": o, **opponents[model][o]}
-                    for o in by_display_order(opponents[model])
-                ],
-            },
-        )
+    dashboard = {
+        "record": {
+            "first": first.isoformat(),
+            "last": last.isoformat(),
+            "pending": pending[0].isoformat() if pending else None,
+        },
+        "models": models,
+        "days": days,
+        "running": running_figures,
+        "accuracy": {m: metrics_of(overall[m]) for m in models},
+        "comparisons": {
+            m: {o: comparisons[m][o] for o in by_display_order(comparisons[m])}
+            for m in models
+        },
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(dashboard, separators=(",", ":"), allow_nan=False),
+        encoding="utf-8",
+    )
     log.info(
-        "wrote %d delivery days, %s to %s, into %s",
-        (last - first).days + 1,
+        "wrote %d delivery days, %s to %s, into %s (%.1f MB)",
+        len(days),
         first,
         last,
         out,
+        out.stat().st_size / 1e6,
     )
-    return record
-
-
-def _model_metrics(by_model: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
-    """One row of four metrics per model, `null` where a figure is undefined."""
-    return [
-        {"model": m, **{metric: by_model[m].get(metric) for metric in METRICS}}
-        for m in by_display_order(by_model)
-    ]
-
-
-def _write(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, separators=(",", ":"), allow_nan=False), encoding="utf-8"
-    )
+    return dashboard
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -4,7 +4,7 @@ pnpm-lock.yaml
 forecast/uv.lock
 
 # Written by the export at deploy time.
-web/public/data/
+web/public/dashboard.json
 
 # Not ours to format.
 node_modules/

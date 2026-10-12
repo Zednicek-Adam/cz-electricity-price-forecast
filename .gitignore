@@ -13,7 +13,7 @@ node_modules/
 dist/
 
 # Written by `forecast.export` at deploy time, never committed (ADR-0016).
-web/public/data/
+web/public/dashboard.json
 
 # Wrangler's local build and state.
 .wrangler/

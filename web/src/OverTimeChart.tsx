@@ -10,7 +10,7 @@
  * tracking ever visibly lags here, the named fix is to memoize the path
  * strings in this file.
  */
-import type { Metric, RunningMetricResponse } from "./types.ts";
+import type { Metric, RunningMetric } from "./types.ts";
 import { AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
@@ -35,7 +35,7 @@ const SCALE_FROM_DAY = 30;
 
 interface Props {
   metric: Metric;
-  running: RunningMetricResponse;
+  running: RunningMetric;
 }
 
 export function OverTimeChart({ metric, running }: Props) {

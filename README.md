@@ -153,7 +153,7 @@ Three models, all univariate, on the roster in `CONTEXT.md` (ADR-0003):
 | `web/` | The dashboard, static assets on a Cloudflare Worker | TypeScript, `pnpm` |
 
 The records they share are the two CSV files in `data/`. There is no database
-and no API: the export turns the records into the JSON files the dashboard
+and no API: the export turns the records into the one JSON file the dashboard
 reads, at deploy time (ADR-0016). There is no monorepo orchestrator: the units
 are plain directories.
 
@@ -166,27 +166,30 @@ are plain directories.
 ```sh
 pnpm install                                        # web/
 uv sync --project forecast                          # forecast/
-uv run --project forecast python -m forecast.export # writes web/public/data/
+uv run --project forecast python -m forecast.export # writes web/public/dashboard.json
 pnpm --filter @cz-epf/web dev                       # the dashboard, on Vite
 ```
 
-The export reads both records, checks them, and writes every file the
-dashboard reads into `web/public/data/`, which is not committed. Run it again
-after changing either record.
+The export reads both records, checks them, and writes everything the
+dashboard shows into `web/public/dashboard.json`, which is not committed. Run
+it again after changing either record.
 
-### The files the dashboard reads
+### The file the dashboard reads
 
-| File | View |
-|---|---|
-| `/data/record.json` | The record's first and last day, and the pending day |
-| `/data/days/<delivery date>.json` | Day view: the repaired observed price and every model over 24 period ordinals |
-| `/data/running/<metric>.json` | Over time view: every model's running metric across the record |
-| `/data/daily/<metric>.json` | The ribbon, and worst / best / random: the headline model's per-day metric |
-| `/data/accuracy.json` | Accuracy table: every model × four metrics over the whole record |
-| `/data/comparisons/<model>.json` | Diebold–Mariano card: a model against both opponents, by period ordinal |
+`/dashboard.json` holds the whole record, and the page fetches it once before
+its first render. Its shape is `Dashboard` in `web/src/types.ts`:
 
-`<metric>` is one of `mae`, `rmse`, `smape` and `rmae`. Their shapes are
-`web/src/types.ts`.
+| Key | What it holds | View |
+|---|---|---|
+| `record` | The first and last delivery day, and the pending day | Caption, navigator, staleness warning |
+| `days` | Per delivery day: the repaired observed price, each model's 24 forecasts and its four metrics for the day | Day view, headline numbers, ribbon, worst / best / random |
+| `running` | Each model's running metric on every scored day | Over time view |
+| `accuracy` | Each model's four metrics over the whole record | Accuracy table |
+| `comparisons` | Each model's Diebold–Mariano statistic against each opponent, by period ordinal | Diebold–Mariano card |
+
+Forecasts are rounded to the cent and figures to six significant digits, finer
+than anything on screen; every figure is computed before rounding. The file is
+about 2.5 MB, 750 kB gzipped, and grows by about 100 kB gzipped a year.
 
 Before it writes anything, the export checks the records and stops on the first
 failure: every model has a forecast on each of the 1,827 days from 2020-01-01
