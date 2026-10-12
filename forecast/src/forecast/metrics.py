@@ -1,4 +1,5 @@
-"""Published metrics, the running metric and the Diebold-Mariano tests.
+"""Published metrics, the running and trailing metrics and the Diebold-Mariano
+tests.
 
 Every number the dashboard shows is computed here, once per export, so every
 reader sees the same figure computed the same way and the browser never
@@ -22,7 +23,7 @@ update is even well defined.
 import itertools
 import math
 from collections.abc import Iterable, Sequence
-from datetime import date
+from datetime import date, timedelta
 from typing import NamedTuple
 
 import numpy as np
@@ -35,6 +36,10 @@ from forecast.models.daylag import DayLagNaive
 
 NAIVE = DayLagNaive.slug
 METRICS = ("mae", "rmse", "smape", "rmae")
+
+# The trailing window, in calendar delivery days, that the 30-day view and the
+# scoreboard's "last 30 days" scope are computed over (ADR-0017).
+WINDOW_DAYS = 30
 
 # A delivery period on the repaired grid, as the scored frame keys it.
 PERIOD = ["delivery_date", "period_ordinal"]
@@ -227,6 +232,40 @@ def _accumulate(
     return values
 
 
+def _windowed(
+    dates: Sequence[date], figures: Iterable[DayFigure], squared: bool, days: int
+) -> list[float | None]:
+    by_date = {f.delivery_date: f for f in figures}
+    values: list[float | None] = []
+    for day in dates:
+        start = day - timedelta(days=days - 1)
+        if start < dates[0]:
+            values.append(None)
+            continue
+        total = 0.0
+        count = 0
+        for k in range(days):
+            if (figure := by_date.get(start + timedelta(days=k))) is not None:
+                total += figure.n_forecasts * (
+                    figure.value**2 if squared else figure.value
+                )
+                count += figure.n_forecasts
+        if count == 0:
+            values.append(None)
+        else:
+            values.append(math.sqrt(total / count) if squared else total / count)
+    return values
+
+
+def _ratio(
+    numerator: list[float | None], denominator: list[float | None]
+) -> list[float | None]:
+    return [
+        None if value is None or not naive else value / naive
+        for value, naive in zip(numerator, denominator, strict=True)
+    ]
+
+
 def running(
     metric: str,
     dates: Sequence[date],
@@ -249,9 +288,31 @@ def running(
     """
     if metric != "rmae":
         return _accumulate(dates, figures, squared=metric == "rmse")
-    numerator = _accumulate(dates, figures, squared=False)
-    denominator = _accumulate(dates, naive_mae, squared=False)
-    return [
-        None if value is None or not naive else value / naive
-        for value, naive in zip(numerator, denominator, strict=True)
-    ]
+    return _ratio(
+        _accumulate(dates, figures, squared=False),
+        _accumulate(dates, naive_mae, squared=False),
+    )
+
+
+def trailing(
+    metric: str,
+    dates: Sequence[date],
+    figures: Iterable[DayFigure],
+    naive_mae: Iterable[DayFigure] = (),
+    days: int = WINDOW_DAYS,
+) -> list[float | None]:
+    """The trailing metric for one model on each of `dates`: the metric over
+    every delivery period in the `days` calendar delivery days ending on that
+    day, pooled exactly as `running` pools, and rMAE likewise the ratio of two
+    windowed MAEs.
+
+    `None` until the window fits inside the record, so the first figure is
+    already a whole window and not a few noisy days, and `None` where the
+    model has no scored day in the window.
+    """
+    if metric != "rmae":
+        return _windowed(dates, figures, metric == "rmse", days)
+    return _ratio(
+        _windowed(dates, figures, False, days),
+        _windowed(dates, naive_mae, False, days),
+    )

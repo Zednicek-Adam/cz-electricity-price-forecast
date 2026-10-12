@@ -53,11 +53,35 @@ def test_one_file_carries_every_view(tmp_path: Path, runs: list[StoredRun]) -> N
     }
     assert dashboard["models"] == ["daylag"]
     assert len(dashboard["days"]) == 1827
-    running = dashboard["running"]
+    running, trailing = dashboard["running"], dashboard["trailing"]
     for metric in ("mae", "rmse", "smape", "rmae"):
         assert len(running[metric]["daylag"]) == len(running["dates"]) == 1827
-    assert dashboard["accuracy"]["daylag"]["rmae"] == 1.0
-    assert dashboard["comparisons"] == {"daylag": {}}
+        assert len(trailing[metric]["daylag"]) == 1827
+    assert dashboard["accuracy"]["whole"]["daylag"]["rmae"] == 1.0
+    assert dashboard["comparisons"] == {
+        "whole": {"daylag": {}},
+        "window": {"daylag": {}},
+    }
+
+
+def test_the_window_is_the_last_thirty_scored_days(
+    tmp_path: Path, runs: list[StoredRun]
+) -> None:
+    dashboard = exported(tmp_path, runs)
+
+    assert dashboard["window"] == {
+        "days": 30,
+        "first": "2024-12-02",
+        "last": "2024-12-31",
+    }
+    trailing = dashboard["trailing"]["mae"]["daylag"]
+    # No figure until a whole window fits, then one on every day.
+    assert trailing[:29] == [None] * 29
+    assert None not in trailing[29:]
+    # The trailing figure on the last day is the window scope's figure.
+    window = dashboard["accuracy"]["window"]["daylag"]
+    assert trailing[-1] == pytest.approx(window["mae"], rel=1e-5)
+    assert window["rmae"] == 1.0
 
 
 def test_a_day_carries_the_observed_price_forecasts_and_metrics(
@@ -80,7 +104,7 @@ def test_forecasts_are_rounded_to_the_cent_and_figures_to_six_digits(
 
     prices = dashboard["days"]["2024-06-01"]["forecasts"]["daylag"]
     assert all(p == round(p, 2) for p in prices)
-    mae = dashboard["accuracy"]["daylag"]["mae"]
+    mae = dashboard["accuracy"]["whole"]["daylag"]["mae"]
     assert mae == float(f"{mae:.6g}")
 
 

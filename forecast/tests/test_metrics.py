@@ -22,6 +22,7 @@ from forecast.metrics import (
     published_metrics,
     running,
     scored_forecasts,
+    trailing,
 )
 
 DAY_1 = date(2024, 1, 31)
@@ -360,3 +361,51 @@ def test_the_running_metric_is_none_until_the_models_first_day() -> None:
     late = [DayFigure(DATES[1], 2.0, 24)]
 
     assert running("mae", DATES, late) == [None, 2.0, 2.0]
+
+
+def window(values: list[float], n: int = 24) -> list[DayFigure]:
+    first = DAY_1
+    return [
+        DayFigure(first + timedelta(days=i), value, n) for i, value in enumerate(values)
+    ]
+
+
+def test_the_trailing_metric_is_none_until_a_whole_window_fits() -> None:
+    days = [DAY_1 + timedelta(days=i) for i in range(5)]
+
+    values = trailing("mae", days, window([1, 2, 3, 4, 5]), days=3)
+
+    assert values == [None, None, 2.0, 3.0, 4.0]
+
+
+def test_the_trailing_rmse_pools_squares_inside_the_window() -> None:
+    days = [DAY_1 + timedelta(days=i) for i in range(3)]
+
+    values = trailing("rmse", days, window([9.0, 3.0, 4.0]), days=2)
+
+    assert values == [
+        None,
+        pytest.approx(math.sqrt(45)),
+        pytest.approx(math.sqrt(12.5)),
+    ]
+
+
+def test_the_trailing_rmae_is_a_ratio_of_windowed_maes() -> None:
+    days = [DAY_1 + timedelta(days=i) for i in range(3)]
+    model = window([1.0, 5.0, 3.0])
+    naive = window([0.01, 10.0, 10.0])
+
+    values = trailing("rmae", days, model, naive, days=2)
+
+    assert values == [None, pytest.approx(6 / 10.01), pytest.approx(0.4)]
+
+
+def test_the_trailing_window_counts_calendar_days_not_scored_days() -> None:
+    # The third day is missing: the window ending on the fourth day holds the
+    # fourth day alone, not the second as well.
+    days = [DAY_1 + timedelta(days=i) for i in range(4)]
+    holed = [f for f in window([1.0, 2.0, 99.0, 4.0]) if f.value != 99.0]
+
+    values = trailing("mae", days, holed, days=2)
+
+    assert values == [None, 1.5, 2.0, 4.0]
