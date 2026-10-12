@@ -1,0 +1,73 @@
+# The daily run (ADR-0011, ADR-0012, ADR-0016): ingest the newly published
+# prices, forecast the pending day, commit both records to `main`. The push
+# starts `main.yml`, which exports, builds and deploys; nothing here deploys.
+#
+# Cron is UTC, so 13:35 is 14:35 in Prague in winter and 15:35 in summer: after
+# the D+1 prices publish at 13:10, either way. The `:35` avoids the top of the
+# hour, GitHub's high-load window for delayed scheduled runs.
+#
+# A run that fails anywhere commits nothing, and there is no retry: tomorrow's
+# run fetches the missing prices, and the forecast it did not write stays a
+# hole. A schedule that stops firing shows on the dashboard as a pending day
+# that has gone stale; `gh workflow enable daily.yml` restarts it.
+name: daily
+
+on:
+  schedule:
+    - cron: "35 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: forecast
+    steps:
+      # The deploy key may push to `main` past the required check (the
+      # repository's ruleset), and unlike `GITHUB_TOKEN` its push starts
+      # `main.yml`.
+      - uses: actions/checkout@v7
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: forecast
+          enable-cache: true
+      - run: uv sync --locked --no-dev --extra chronos
+      # Chronos-2's weights, at the revision `forecast.models.chronos2` pins.
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-${{ hashFiles('forecast/src/forecast/models/chronos2.py') }}
+      - name: Ingest and forecast
+        env:
+          ENTSOE_API_TOKEN: ${{ secrets.ENTSOE_API_TOKEN }}
+        run: uv run --no-dev --extra chronos python -m forecast.daily
+      - name: Commit the records to main
+        working-directory: .
+        run: |
+          git add data/cz-day-ahead-prices.csv data/forecasts.csv
+          if git diff --cached --quiet; then
+            echo "Nothing new: the records are as they were." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "data: daily run $(date -u +%F)"
+          # A merge may have landed while the run forecast. The commit only
+          # adds rows at the ends of the records, so the rebase is clean unless
+          # the merge changed those ends too, and then the run fails here and
+          # tomorrow's starts from the new `main`.
+          git pull -q --rebase origin main
+          git push -q origin HEAD:main
+          git log -1 --format="Pushed %h: %s" >> "$GITHUB_STEP_SUMMARY"

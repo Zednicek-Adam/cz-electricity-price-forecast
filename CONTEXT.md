@@ -2,8 +2,8 @@
 
 A public dashboard that forecasts the day-ahead electricity prices for the Czech
 bidding zone and scores its own forecasts against the market outcome once it is
-known. This glossary fixes the vocabulary that the schema, the API and the UI all
-inherit.
+known. This glossary fixes the vocabulary that the records, the code and the UI
+all inherit.
 
 ## Language
 
@@ -37,8 +37,9 @@ _Avoid_: granularity, frequency
 **Average Rule price**:
 An hourly price derived by averaging the four quarter-hourly prices of the same
 hour, rather than cleared as an hourly product. Every Czech hourly price from
-delivery day 2025-10-01 onward is one. It is derived on the way into the store
-and carried as a continuation of the traded hourly series. See ADR-0011.
+delivery day 2025-10-01 onward is one. It is derived on the way out of the
+price record, which holds the quarter-hours as published, and carried as a
+continuation of the traded hourly series. See ADR-0011 and ADR-0016.
 
 ### Prices and forecasts
 
@@ -72,9 +73,9 @@ _Avoid_: live forecast (that is a `run_type`), current forecast, upcoming
 **Forecast run**:
 One execution of **one model** for **one delivery day**, producing 24 forecasts.
 Its model is a pure function of the history it is handed and the day it is asked
-about — it holds no store connection and no clock, so it cannot read past its
-cutoff. Every run is marked `backtest` or `live`, and the two are never pooled
-into one accuracy figure. See ADR-0002.
+about — it holds no file, no connection and no clock, so it cannot read past
+its cutoff. Every run is marked `backtest` or `live`; the mark is provenance,
+and accuracy figures pool the two into one record. See ADR-0002 and ADR-0016.
 _Avoid_: batch, job, execution
 
 **Daily run**:
@@ -96,18 +97,19 @@ _Avoid_: as-of time, knowledge date, information set
 **Model**:
 An object that turns history into forecasts. Construction does its setup once;
 `forecast(history, target_day) -> 24 floats` is then called per delivery day and
-holds no store handle, no provider and no clock. v1 has exactly three — the
+holds no file, no provider and no clock. v1 has exactly three — the
 day-lag naïve, AR-168 and Chronos-2. See ADR-0003.
 _Avoid_: predictor, algorithm, estimator
 
-A model is named on a stored row by its **slug**, and these are the only three:
-`chronos2`, `ar168`, `daylag`. The slug is free text in the database rather than a
-constraint, so this list is the authority. See ADR-0005.
+A model is named on a forecast row by its **slug**, and these are the only
+three: `chronos2`, `ar168`, `daylag`. The slug is free text in
+`data/forecasts.csv`, so this list is the authority; the export refuses a slug
+that is not on it.
 
 **Runner**:
-What drives models. It owns the day loop, slices history at the cutoff, and
-writes the forecasts. Everything a model is not allowed to touch lives here, so
-it is also the single thing the live cutover changes. See ADR-0002.
+What drives models. It owns the day loop and slices history at the cutoff;
+the replay and the daily run write what it returns. Everything a model is not
+allowed to touch lives here. See ADR-0002.
 _Avoid_: pipeline, orchestrator, job
 
 **Headline model**:
@@ -133,16 +135,16 @@ An accuracy figure computed over every delivery period from the start of the
 record up to and including a given delivery day — a cumulative sum divided by the
 count of periods, not a rolling window. Plotted across the record it shows a
 whole-period figure settling rather than a day being scored, which is how the
-dashboard exposes the 2022 distortion without a per-year breakdown. It is not
-stored: the read API derives it from the per-day published metrics, and the
-running rMAE is the ratio of two running MAEs, not a running mean of per-day
-ratios. See ADR-0007 and ADR-0015.
+dashboard exposes the 2022 distortion without a per-year breakdown. The export
+derives it from the per-day published metrics, and the running rMAE is the
+ratio of two running MAEs, not a running mean of per-day ratios. See ADR-0007
+and ADR-0016.
 _Avoid_: rolling, moving average, cumulative metric
 
 **Backtest**:
 A forecast run replayed over a delivery day whose observed price is already
 known, honest only because the cutoff is enforced structurally rather than
-asserted. Every forecast v1 shows is one.
+asserted. Every forecast for a delivery day up to 2026-10-13 is one.
 _Avoid_: simulation, replay, hindcast
 
 **Scoreboard**:
@@ -153,11 +155,10 @@ arrives independently of the forecast.
 _Avoid_: leaderboard, results, performance
 
 **Published metric**:
-An accuracy figure with a fixed definition, computed once when the forecasts it
-describes are written, and thereafter read rather than recalculated. Every number
-the scoreboard shows is one, so all readers see the same figure computed the same
-way. The single exception is the running metric, which is derived at read time
-from per-day published metrics (ADR-0015). See ADR-0004.
+An accuracy figure with a fixed definition, computed once per deploy by the
+export from the whole forecast record, and thereafter read rather than
+recalculated. Every number the scoreboard shows is one, so all readers see the
+same figure computed the same way. See ADR-0004 and ADR-0016.
 _Avoid_: stat, score, aggregate
 
 **Grid repair**:
@@ -165,18 +166,18 @@ The transformation that turns the true, irregular record of a daylight-saving
 delivery day into the regular 24-period grid the models require: the fall-back
 day's two overlapping periods averaged into one, the spring-forward day's missing
 period linearly interpolated. It is lossy, it belongs to the model layer, and it
-is never applied to stored observed prices. See ADR-0001.
+is never applied to the observed prices in the record. See ADR-0001.
 
 **Repaired observed price**:
-The observed price series after grid repair, on the regular 24-period grid. It is
-stored rather than recomputed — written by the loader in the same transaction as
-the observed prices it derives from — so grid repair has exactly one
+The observed price series after the Average Rule and grid repair, on the
+regular 24-period grid. It is derived from the price record whenever it is read,
+by `forecast.loader` and nothing else, so grid repair has exactly one
 implementation. It is what the models are fed and what forecasts are scored
-against. See ADR-0005.
+against. See ADR-0001 and ADR-0016.
 _Avoid_: repaired series (unqualified), model input, adjusted price
 
 **Ingest**:
-Bringing published observed prices into the store. It **reconciles**: it works
+Bringing published observed prices into the price record. It **reconciles**: it works
 out which delivery days are missing and fetches only those, so it never re-reads
 a day it already holds and a missed day heals itself on the next run. Loading
 years of history is the same act with a wider range, not a separate capability.
@@ -190,8 +191,9 @@ observed price, and it never produces a forecast. See ADR-0011.
 _Avoid_: correction, fix, reconcile (that is what ingest does)
 
 **Provenance**:
-Where an observed price came from and when it was retrieved. Carried on the row,
-because it cannot be reconstructed after the fact.
+Where an observed price came from and when it was retrieved. Carried by the
+record's history rather than its rows: `data/README.md` says which source each
+range of delivery days came from, and the commit that added a day says when.
 _Avoid_: origin, lineage
 
 ### Accuracy
@@ -254,7 +256,7 @@ _Avoid_: main chart, primary graph
 models over the 24 period ordinals of one delivery day, priced in EUR/MWh.
 
 **Over time view** — the hero chart showing the **running metric** for the three
-models across every replayed delivery day. It carries no observed line: on a
+models across every scored delivery day. It carries no observed line: on a
 metric axis the observed price is the zero the metric is measured from, not a
 series.
 _Avoid_: history view, trend view

@@ -9,19 +9,25 @@ disagree, `CONTEXT.md` is right and this page is wrong.
 
 ## What the record is
 
-A **backtest** over 1,827 delivery days, 2020-01-01 to 2024-12-31, for every
-model, with nothing excluded. The 2022 energy crisis is in, and so are negative
-prices and the daylight-saving days. The window starts in 2020 because AR-168
-needs two years of history, and the price record opens on 2018-01-01. Chronos-2
-could have started earlier but doesn't: a model scored over a different stretch
-of days would not be part of the same comparison.
+Every delivery day from 2020-01-01 to the newest, for every model, with
+nothing excluded. The 2022 energy crisis is in, and so are negative prices and
+the daylight-saving days. The record starts in 2020 because AR-168 needs two
+years of history, and the price record opens on 2018-01-01. Chronos-2 could
+have started earlier but doesn't: a model scored over a different stretch of
+days would not be part of the same comparison.
+
+Up to 2026-10-13 the record is a **backtest**: the forecasts were made after
+the fact, over days whose prices were already known. From 2026-10-14 on, the
+daily run makes each forecast before its price is published, two days ahead.
+Both are scored the same way and counted together. The newest day is the
+**pending** one: forecast, with no price yet, so with no accuracy figure.
 
 Each forecast was made for one **delivery day** (a calendar day in
 `Europe/Prague`) using only the prices of delivery periods that start before
 that day begins. That limit is part of how the code works, not a rule anyone
 has to remember to follow. A model is handed its history as a value and can see
-nothing else: no database, no clock, and nothing from the day it is
-forecasting. So the forecasts are honest even though the prices they are scored
+nothing else: no file, no clock, and nothing from the day it is forecasting. So
+the backtest forecasts are honest even though the prices they are scored
 against were already known when they were made.
 
 Every price is in **EUR/MWh**, the unit the market clears and publishes in.
@@ -37,11 +43,15 @@ grid, so those days are **grid-repaired** before any model sees them:
   01:00 and 03:00;
 - **fall back:** the two periods labelled 02:00 are averaged into one.
 
-The repair is lossy and done in exactly one place. The stored record keeps the
-true 23 or 25 periods; the repaired prices are stored beside them and are what
-the models are fed and what their forecasts are scored against. Across the
-backtest window that means five hours scored against interpolated prices and
-five against averaged pairs. The Day view draws daylight-saving days on the
+The repair is lossy and done in exactly one place. The record keeps the true
+23 or 25 periods; the repaired prices are derived from it on the way out, and
+are what the models are fed and what their forecasts are scored against. That
+means one hour a year scored against an interpolated price and one against an
+averaged pair.
+
+From 2025-10-01 the market clears in quarter-hours. The record keeps the
+quarter-hours as published, and the hourly price the models see is the mean of
+each hour's four, the **Average Rule** price. The Day view draws daylight-saving days on the
 repaired grid without comment, because that is the comparison that actually
 happened.
 
@@ -49,7 +59,7 @@ happened.
 
 | Model | What it is | Where it comes from |
 |---|---|---|
-| **Chronos-2** | Amazon's pretrained time-series model, used zero-shot on the price history alone. The headline model | `amazon/chronos-2`, pinned to an explicit revision, run on CPU. Joins in phase 4 |
+| **Chronos-2** | Amazon's pretrained time-series model, used zero-shot on the price history alone. The headline model | `amazon/chronos-2`, pinned to an explicit revision, run on CPU |
 | **AR-168** | Least squares on the last 168 hourly changes in price, fitted afresh each day on the previous 730 days, forecast 24 hours ahead step by step | A port of the author's diploma thesis code |
 | **Naïve** (day-lag naïve) | Yesterday's price for the same hour | — |
 
@@ -57,7 +67,7 @@ The **headline model**, the one the dashboard leads with, was fixed as
 Chronos-2 before any result was read, so it is not the one that happened to
 win.
 
-Every stored forecast carries its **`model_version`** (a specification string,
+Every forecast in the record carries its **`model_version`** (a specification string,
 or the pinned Chronos-2 revision) and its **`code_version`** (the git commit
 that produced it). Between them they explain why a number would ever change.
 
@@ -91,8 +101,8 @@ own.**
 
 **SMAPE near zero.** SMAPE divides by `|observed| + |forecast|`, which gets small
 wherever the price is near zero, and Czech prices do go to zero and below. In
-the backtest window 88 of the scored delivery periods are at exactly 0.00
-EUR/MWh and 903 within 5 EUR/MWh of it, so a handful of hours can dominate the average. Where
+2020–2024 alone, 88 of the scored delivery periods are at exactly 0.00 EUR/MWh
+and 903 within 5 EUR/MWh of it, so a handful of hours can dominate the average. Where
 both the price and the forecast are exactly zero, the ratio counts as 0 rather
 than being undefined. SMAPE is shown because it is standard, not because it
 suits this series; MAE and rMAE are the steadier guides.
@@ -128,9 +138,8 @@ is left blank.
 
 ## Where the numbers come from
 
-Every figure on the dashboard is computed once, when the forecasts are made,
-and stored. The site reads it back and does not recompute it per visit, so
-everyone sees the same number. The one exception is the Over time view's
-running figure, which the API builds from the stored daily figures when asked.
-The code for all of it is in this repository: the metrics in
-`forecast/src/forecast/metrics.py`, the running figure in `api/src/running.ts`.
+Every figure on the dashboard is computed once per deploy, from the whole
+record, and written into the files the site serves. The site reads them and
+does not recompute anything per visit, so everyone sees the same number. The
+code for all of it is in this repository, in `forecast/src/forecast/metrics.py`,
+and the records it reads are the two CSV files in `data/`.

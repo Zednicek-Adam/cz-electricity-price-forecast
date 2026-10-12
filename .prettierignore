@@ -2,8 +2,9 @@
 # (ADR-0010) — reformatting them is exactly what must not happen.
 pnpm-lock.yaml
 forecast/uv.lock
-db/schema.sql
-api/src/db.generated.ts
+
+# Written by the export at deploy time.
+web/public/data/
 
 # Not ours to format.
 node_modules/

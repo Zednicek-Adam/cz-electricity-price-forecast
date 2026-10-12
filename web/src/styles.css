@@ -122,6 +122,21 @@ button[aria-pressed="true"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* The pending day's stand-in for the headline numbers. */
+.note {
+  margin: 12px 0 6px;
+  color: var(--ink-2);
+}
+
+/* The one warning the page carries (ADR-0012): the daily run has stopped. */
+.stale {
+  margin: -8px 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--series-ar168);
+  border-radius: 6px;
+  color: var(--ink);
+}
+
 .unit {
   font-size: 13px;
   font-weight: 400;

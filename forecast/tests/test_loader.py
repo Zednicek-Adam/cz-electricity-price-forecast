@@ -1,23 +1,26 @@
-"""The loader and grid repair, asserted on stored rows in a real Postgres.
-
-The loader runs as `app_writer` here, so these tests also prove the writer's
-grants are enough to load the record, and no more than that is needed.
-"""
+"""The price record, the Average Rule and grid repair, on the real file and on
+small synthetic ones."""
 
 import hashlib
+from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
-import psycopg
 import pytest
 
-from forecast.grid import IncompleteDeliveryDay
+from conftest import hourly_day, write_prices
+from forecast.grid import IncompleteDeliveryDay, delivery_day, repair_grid
 from forecast.loader import (
-    FROZEN_PROVENANCE,
-    ConflictingObservedPrice,
+    QUARTER_HOURLY_FROM,
     ObservedPrice,
-    load_frozen_dataset,
-    load_observed_prices,
+    append_prices,
+    complete_days,
+    day_periods,
+    hourly_prices,
+    read_prices,
+    repaired_prices,
+    resolution_on,
 )
 
 # SHA-256 of the thesis's grid-repaired prices, `epf-diploma/sources/CZ.csv`, which
@@ -29,12 +32,7 @@ from forecast.loader import (
 THESIS_CZ_CSV_SHA256 = (
     "608edbcf12b4b61e6a7005625073c7de0774e76ec0027f056845e599b5412cc3"
 )
-
-
-@pytest.fixture
-def writer(db: psycopg.Connection) -> psycopg.Connection:
-    db.execute("SET LOCAL ROLE app_writer")
-    return db
+FROZEN_TO = date(2024, 12, 31)
 
 
 def local_label(day: date, period_ordinal: int) -> datetime:
@@ -44,49 +42,60 @@ def local_label(day: date, period_ordinal: int) -> datetime:
     )
 
 
-def count(conn: psycopg.Connection, table: str) -> int:
-    (n,) = conn.execute(f"SELECT count(*) FROM {table}").fetchone()
-    return n
+def test_the_frozen_years_are_the_gui_export_unchanged() -> None:
+    frozen = [p for p in read_prices() if delivery_day(p.delivery_start) <= FROZEN_TO]
 
-
-def test_every_period_of_the_frozen_dataset_is_stored_with_its_provenance(
-    writer: psycopg.Connection,
-) -> None:
-    load_frozen_dataset(writer)
-
-    assert count(writer, "observed_price") == 61_368
-    assert writer.execute(
-        "SELECT DISTINCT source, retrieved_at, resolution_minutes FROM observed_price"
-    ).fetchall() == [(FROZEN_PROVENANCE.source, FROZEN_PROVENANCE.retrieved_at, 60)]
-    assert writer.execute(
-        "SELECT min(delivery_start), max(delivery_start) FROM observed_price"
-    ).fetchone() == (
+    assert len(frozen) == 61_368
+    assert {p.resolution_minutes for p in frozen} == {60}
+    assert (frozen[0].delivery_start, frozen[-1].delivery_start) == (
         datetime(2017, 12, 31, 23, tzinfo=UTC),
         datetime(2024, 12, 31, 22, tzinfo=UTC),
     )
 
 
-def test_the_repaired_observed_prices_reproduce_the_thesis_exactly(
-    writer: psycopg.Connection,
-) -> None:
-    load_frozen_dataset(writer)
-
-    rows = writer.execute(
-        "SELECT delivery_date, period_ordinal, price FROM repaired_observed_price"
-        " ORDER BY delivery_date, period_ordinal"
-    ).fetchall()
+def test_the_repaired_frozen_years_reproduce_the_thesis_exactly() -> None:
+    rows = [r for r in repaired_prices() if r.delivery_date <= FROZEN_TO]
     lines = [
-        f"{local_label(d, o):%Y-%m-%d %H:%M:%S},{price.quantize(Decimal('0.001'))}"
-        for d, o, price in rows
+        f"{local_label(r.delivery_date, r.period_ordinal):%Y-%m-%d %H:%M:%S},"
+        f"{r.price.quantize(Decimal('0.001'))}"
+        for r in rows
     ]
+
     assert len(lines) == 61_368
     assert hashlib.sha256("\n".join(lines).encode()).hexdigest() == (
         THESIS_CZ_CSV_SHA256
     )
 
 
+def test_every_day_of_the_record_is_complete_at_the_resolution_it_cleared_at() -> None:
+    prices = read_prices()
+    days = complete_days({p.delivery_start: p.price for p in prices})
+    first, last = date(2018, 1, 1), delivery_day(prices[-1].delivery_start)
+
+    assert list(days) == [
+        first + timedelta(days=i) for i in range((last - first).days + 1)
+    ]
+    assert {p.resolution_minutes for p in prices if p.delivery_start.year < 2025} == {
+        60
+    }
+    assert all(
+        p.resolution_minutes == resolution_on(delivery_day(p.delivery_start))
+        for p in prices
+    )
+
+
+def test_the_hourly_years_carry_seven_short_and_seven_long_days() -> None:
+    per_day = Counter(
+        delivery_day(p.delivery_start)
+        for p in read_prices()
+        if delivery_day(p.delivery_start) <= FROZEN_TO
+    )
+
+    assert Counter(per_day.values()) == {23: 7, 24: 2543, 25: 7}
+
+
 @pytest.mark.parametrize(
-    ("day", "observed", "repaired_0200"),
+    ("day", "periods", "repaired_0200"),
     [
         # ADR-0001's worked examples: an interpolated 02:00 and an averaged one.
         (date(2024, 3, 31), 23, Decimal("50.385")),  # (56.09 + 44.68) / 2
@@ -94,126 +103,95 @@ def test_the_repaired_observed_prices_reproduce_the_thesis_exactly(
     ],
 )
 def test_a_daylight_saving_day_keeps_its_true_periods_and_repairs_to_24(
-    writer: psycopg.Connection, day: date, observed: int, repaired_0200: Decimal
+    day: date, periods: int, repaired_0200: Decimal
 ) -> None:
-    load_frozen_dataset(writer)
+    prices = read_prices()
+    repaired = [r for r in repaired_prices() if r.delivery_date == day]
 
-    (n_observed,) = writer.execute(
-        "SELECT count(*) FROM observed_price"
-        " WHERE (delivery_start AT TIME ZONE 'Europe/Prague')::date = %s",
-        (day,),
-    ).fetchone()
-    repaired = writer.execute(
-        "SELECT period_ordinal, price FROM repaired_observed_price"
-        " WHERE delivery_date = %s ORDER BY period_ordinal",
-        (day,),
-    ).fetchall()
-    assert n_observed == observed
-    assert [o for o, _ in repaired] == list(range(1, 25))
-    assert repaired[2][1] == repaired_0200
+    assert sum(delivery_day(p.delivery_start) == day for p in prices) == periods
+    assert [r.period_ordinal for r in repaired] == list(range(1, 25))
+    assert repaired[2].price == repaired_0200
 
 
-def test_the_record_is_an_unbroken_hourly_grid_with_seven_short_and_seven_long_days(
-    writer: psycopg.Connection,
+@pytest.mark.parametrize(
+    ("day", "quarter_hours"),
+    [(date(2025, 10, 26), 100), (date(2026, 3, 29), 92), (date(2026, 6, 1), 96)],
+)
+def test_a_quarter_hourly_day_holds_its_true_periods(
+    day: date, quarter_hours: int
 ) -> None:
-    load_frozen_dataset(writer)
+    held = [p for p in read_prices() if delivery_day(p.delivery_start) == day]
 
-    # Consecutive periods one hour apart everywhere; the primary key already
-    # rules out duplicates.
-    assert writer.execute(
-        "SELECT count(*) FROM (SELECT delivery_start - lag(delivery_start)"
-        " OVER (ORDER BY delivery_start) AS step FROM observed_price) AS steps"
-        " WHERE step <> interval '1 hour'"
-    ).fetchone() == (0,)
-    per_day = dict(
-        writer.execute(
-            "SELECT n, count(*) FROM (SELECT count(*) AS n FROM observed_price"
-            " GROUP BY (delivery_start AT TIME ZONE 'Europe/Prague')::date) AS days"
-            " GROUP BY n"
-        ).fetchall()
-    )
-    assert per_day == {23: 7, 24: 2543, 25: 7}
-
-
-def test_every_delivery_day_repairs_to_exactly_24_periods(
-    writer: psycopg.Connection,
-) -> None:
-    load_frozen_dataset(writer)
-
-    assert writer.execute(
-        "SELECT count(*), min(delivery_date), max(delivery_date)"
-        " FROM (SELECT delivery_date FROM repaired_observed_price"
-        "       GROUP BY delivery_date HAVING count(*) = 24) AS days"
-    ).fetchone() == (2557, date(2018, 1, 1), date(2024, 12, 31))
-
-
-def test_loading_the_same_dataset_twice_changes_nothing(
-    writer: psycopg.Connection,
-) -> None:
-    load_frozen_dataset(writer)
-    again = load_frozen_dataset(writer)
-
-    assert (again.observed_inserted, again.repaired_inserted) == (0, 0)
-    assert count(writer, "observed_price") == 61_368
-    assert count(writer, "repaired_observed_price") == 61_368
-
-
-def test_a_conflicting_observed_price_raises_and_writes_nothing(
-    db: psycopg.Connection,
-) -> None:
-    db.execute(
-        "INSERT INTO observed_price VALUES"
-        " ('2020-06-01T10:00:00Z', 60, 999.99, 'elsewhere', now())"
-    )
-    db.execute("SET LOCAL ROLE app_writer")
-
-    with pytest.raises(ConflictingObservedPrice):
-        load_frozen_dataset(db)
-
-    assert count(db, "observed_price") == 1
-    assert count(db, "repaired_observed_price") == 0
-    assert db.execute("SELECT price FROM observed_price").fetchone() == (
-        Decimal("999.99"),
+    assert len(held) == quarter_hours == len(day_periods(day, 15))
+    assert [r.period_ordinal for r in repaired_prices() if r.delivery_date == day] == (
+        list(range(1, 25))
     )
 
 
-def test_both_tables_are_written_in_one_transaction(database_url: str) -> None:
-    # Make the second of the two writes fail inside Postgres, after the first
-    # has gone through, and check from another connection that the first did
-    # not survive it. The loader runs on a fresh connection here, not inside
-    # the `db` fixture's transaction, so this is its real BEGIN and ROLLBACK
-    # rather than a savepoint.
-    with psycopg.connect(database_url, autocommit=True) as admin:
-        admin.execute(
-            "CREATE FUNCTION pg_temp.refuse() RETURNS trigger LANGUAGE plpgsql AS"
-            " $$ BEGIN RAISE EXCEPTION 'refused'; END $$"
-        )
-        admin.execute(
-            "CREATE TRIGGER refuse BEFORE INSERT ON repaired_observed_price"
-            " FOR EACH ROW EXECUTE FUNCTION pg_temp.refuse()"
-        )
-        try:
-            with psycopg.connect(database_url, autocommit=True) as loader_conn:
-                loader_conn.execute("SET ROLE app_writer")
-                loader_conn.autocommit = False
-                with pytest.raises(psycopg.errors.RaiseException):
-                    load_frozen_dataset(loader_conn)
-            assert count(admin, "observed_price") == 0
-        finally:
-            admin.execute("DROP TRIGGER refuse ON repaired_observed_price")
-
-
-def test_a_delivery_day_with_a_missing_period_raises_and_writes_nothing(
-    writer: psycopg.Connection,
-) -> None:
-    local_midnight = datetime(2024, 5, 31, 22, tzinfo=UTC)  # 2024-06-01, CEST
-    day = [
-        ObservedPrice(local_midnight + timedelta(hours=i), 60, Decimal(i))
-        for i in range(24)
-        if i != 5
+def quarter_hours(day: date, prices: list[str]) -> list[ObservedPrice]:
+    """A quarter-hourly day whose four quarter-hours of each hour repeat
+    `prices`."""
+    return [
+        ObservedPrice(start, 15, Decimal(prices[i % 4]))
+        for i, start in enumerate(day_periods(day, 15))
     ]
 
-    with pytest.raises(IncompleteDeliveryDay):
-        load_observed_prices(writer, day, FROZEN_PROVENANCE)
 
-    assert count(writer, "observed_price") == 0
+def test_the_average_rule_averages_the_four_quarter_hours_exactly() -> None:
+    day = date(2026, 6, 1)
+    hourly = hourly_prices(quarter_hours(day, ["10.01", "20.02", "30.03", "40.05"]))
+
+    assert len(hourly) == 24
+    assert set(hourly.values()) == {Decimal("25.0275")}
+
+
+def test_the_average_rule_needs_all_four_quarter_hours() -> None:
+    day = date(2026, 6, 1)
+    prices = quarter_hours(day, ["1", "2", "3", "4"])
+
+    with pytest.raises(ValueError, match="3 quarter-hours"):
+        hourly_prices(prices[:5] + prices[6:])
+
+
+def test_a_day_at_another_resolution_than_the_market_cleared_at_raises() -> None:
+    hourly_after_the_change = hourly_day(QUARTER_HOURLY_FROM)
+
+    with pytest.raises(ValueError, match="resolution 60, expected 15"):
+        hourly_prices(hourly_after_the_change)
+
+
+def test_a_period_held_twice_raises() -> None:
+    day = hourly_day(date(2024, 6, 1))
+
+    with pytest.raises(ValueError, match="duplicate"):
+        hourly_prices([*day, day[3]])
+
+
+def test_a_delivery_day_with_a_missing_period_raises() -> None:
+    day = hourly_day(date(2024, 6, 1))
+    del day[5]
+
+    with pytest.raises(IncompleteDeliveryDay):
+        repair_grid(hourly_prices(day))
+
+
+def test_appending_writes_rows_that_read_back_as_they_were(tmp_path: Path) -> None:
+    path = write_prices(tmp_path / "prices.csv", hourly_day(date(2025, 9, 30)))
+    new = quarter_hours(date(2025, 10, 1), ["1.50", "-2.00", "3.25", "4.00"])
+
+    append_prices(new, path)
+
+    assert read_prices(path)[24:] == new
+    assert path.read_text(encoding="utf-8").splitlines()[25] == (
+        "2025-09-30T22:00:00Z,15,1.50"
+    )
+
+
+def test_appending_anything_not_after_the_last_period_held_raises(
+    tmp_path: Path,
+) -> None:
+    path = write_prices(tmp_path / "prices.csv", hourly_day(date(2025, 9, 30)))
+
+    with pytest.raises(ValueError, match="not after"):
+        append_prices(hourly_day(date(2025, 9, 30)), path)
+    assert len(read_prices(path)) == 24

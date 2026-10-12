@@ -4,7 +4,7 @@ A model is an object. Construction does its setup once; then
 
     model.forecast(history, target_day) -> 24 floats
 
-is called per delivery day and holds no store handle, no provider and no clock.
+is called per delivery day and holds no file, no provider and no clock.
 Its only access to data is its argument, so a forecast run cannot read past its
 cutoff: look-ahead is unreachable rather than forbidden.
 
@@ -31,7 +31,7 @@ from forecast.grid import REPAIRED_PERIODS_PER_DAY, market_label
 
 class Model(Protocol):
     slug: str
-    """How a stored row names the model. The roster is fixed in CONTEXT.md."""
+    """How a forecast row names the model. The roster is fixed in CONTEXT.md."""
 
     version: str
     """`model_version` on every forecast row: a specification string, or a

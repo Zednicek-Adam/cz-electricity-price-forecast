@@ -1,7 +1,12 @@
-# The replay (ADR-0010): load the frozen dataset, forecast a model set over a
-# date range, rebuild every published metric and model comparison. It writes to
-# production Neon, so it runs only when a person asks it to: `workflow_dispatch`
-# and nothing else. No schedule, and never on a merge.
+# The replay (ADR-0010, ADR-0016): forecast a model set over a date range as
+# backtests and merge the runs into `data/forecasts.csv`. It runs only when a
+# person asks it to: `workflow_dispatch` and nothing else.
+#
+# It never touches `main` or the dashboard. The changed record is pushed to a
+# `replay/<run>` branch, and a person opens the pull request from the link in
+# the run's summary, so new numbers are reviewed, gated and previewed like any
+# other change before the merge deploys them. (A pull request opened by the
+# workflow itself would start no gate, so it could never go green.)
 #
 # With the `chronos` extra installed, `chronos2` is in the model set; its
 # weights are downloaded at the pinned revision on the runner. No Hugging Face
@@ -20,14 +25,13 @@ on:
         required: true
         default: "2020-01-01"
       end:
-        description: Last delivery day (YYYY-MM-DD)
-        required: true
-        default: "2024-12-31"
+        description: Last delivery day (YYYY-MM-DD); empty for the last with a published price
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
-# One replay at a time: two would interleave their rebuilds.
 concurrency:
   group: replay
   cancel-in-progress: false
@@ -36,25 +40,48 @@ jobs:
   replay:
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 120
+    timeout-minutes: 180
     defaults:
       run:
         working-directory: forecast
     steps:
       - uses: actions/checkout@v7
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           working-directory: forecast
           enable-cache: true
       - run: uv sync --locked --no-dev --extra chronos
-      # As the Neon writer: it can append to the record and replace derived
-      # rows, and nothing more (the grant migration).
-      - name: Replay ${{ inputs.models }} over ${{ inputs.start }} to ${{ inputs.end }}
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/huggingface
+          key: huggingface-${{ hashFiles('forecast/src/forecast/models/chronos2.py') }}
+      - name: Replay ${{ inputs.models }} from ${{ inputs.start }}
         env:
-          DATABASE_URL: ${{ secrets.NEON_WRITER }}
           MODELS: ${{ inputs.models }}
           START: ${{ inputs.start }}
           END: ${{ inputs.end }}
         run: >
           uv run --no-dev --extra chronos python -m forecast.replay
-          --models "$MODELS" --start "$START" --end "$END"
+          --models "$MODELS" --start "$START" ${END:+--end "$END"}
+      - name: Push the record to a branch
+        working-directory: .
+        env:
+          BRANCH: replay/${{ github.run_number }}
+          MODELS: ${{ inputs.models }}
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          git add data/forecasts.csv
+          if git diff --cached --quiet; then
+            echo "The replay changed nothing." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -q -c "$BRANCH"
+          git commit -q -m "data: replay $MODELS from $START${END:+ to $END}"
+          git push -q origin "$BRANCH"
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
+          echo "Pushed \`$BRANCH\`. [Open the pull request]($url)." >> "$GITHUB_STEP_SUMMARY"

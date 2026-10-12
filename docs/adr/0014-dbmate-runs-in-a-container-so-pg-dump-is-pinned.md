@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0016
 ---
 
 # `dbmate` runs in a container, because pinning `pg_dump` is what keeps the schema file honest

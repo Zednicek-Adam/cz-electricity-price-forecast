@@ -1,25 +1,25 @@
-"""Fixtures for tests that run against a real Postgres.
+"""Shared test helpers. Every test runs on files and DataFrames: there is no
+database and no network anywhere in the suite.
 
-There is no mocked database anywhere in this repository. The database is the
-`db` service of `docker-compose.yml`, locally and in the pull request gate, with
-the migrations applied by the pinned `dbmate` container:
-
-    docker compose up -d --wait db && docker compose run --rm dbmate up
-
-`DATABASE_URL` overrides the local default.
+The real records in `data/` are read where a test is about them; anything a
+test writes goes to its own `tmp_path`.
 """
 
-import os
-from collections.abc import Iterator
+import csv
+from collections.abc import Iterable
+from datetime import date
+from decimal import Decimal
 from functools import cache
+from pathlib import Path
 
-import psycopg
 import pytest
 
+from forecast.grid import true_periods
+from forecast.loader import COLUMNS, TIMESTAMP, ObservedPrice
 from forecast.model import Model
 from forecast.models import DOWNLOADED, ROSTER, build
 
-LOCAL_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/czepf"
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def roster() -> list:
@@ -37,21 +37,20 @@ def built(slug: str) -> Model:
     return build(slug)
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    return os.environ.get("DATABASE_URL", LOCAL_DATABASE_URL)
+def hourly_day(day: date, price: Decimal = Decimal("50.00")) -> list[ObservedPrice]:
+    """Every true market period of an hourly day, each at a distinct price."""
+    return [
+        ObservedPrice(start, 60, price + i) for i, start in enumerate(true_periods(day))
+    ]
 
 
-@pytest.fixture
-def db(database_url: str) -> Iterator[psycopg.Connection]:
-    """A connection whose every write is rolled back when the test ends.
-
-    Everything a test does, including a `conn.transaction()` block in the code
-    under test (which becomes a savepoint), sits inside one transaction that is
-    rolled back at the end, whatever the test's first statement is.
-    """
-    with (
-        psycopg.connect(database_url) as conn,
-        conn.transaction(force_rollback=True),
-    ):
-        yield conn
+def write_prices(path: Path, prices: Iterable[ObservedPrice]) -> Path:
+    """A price record in the format of `data/cz-day-ahead-prices.csv`."""
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh, lineterminator="\n")
+        writer.writerow(COLUMNS)
+        for p in prices:
+            writer.writerow(
+                [p.delivery_start.strftime(TIMESTAMP), p.resolution_minutes, p.price]
+            )
+    return path

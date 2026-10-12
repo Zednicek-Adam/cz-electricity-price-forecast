@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by ADR-0016
 ---
 
 # A forecast run is one model, one delivery day, behind a pure-function seam

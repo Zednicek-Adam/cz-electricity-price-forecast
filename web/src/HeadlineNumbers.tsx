@@ -2,7 +2,7 @@
  * The numbers beneath the title: every model's figure in the selected metric.
  * In the Day view they are the selected delivery day's, as published.
  */
-import type { Metric, ModelMetrics } from "@cz-epf/api";
+import type { Metric, ModelMetrics } from "./types.ts";
 
 import {
   formatMetric,

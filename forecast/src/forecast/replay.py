@@ -1,31 +1,29 @@
-"""The replay: the one top-level call that fills the store (ADR-0010).
+"""The replay: backtest forecast runs over a date range, into the record.
 
-    load the frozen dataset -> run the runner over a date range for a model set
-    -> rebuild every derived row
+    read the repaired observed prices -> run the runner over a date range for a
+    model set -> merge the runs into `data/forecasts.csv`
 
-It is also seam 2's entry point: the persistence tests call `replay` and assert
-on what it stored.
-
-From the command line, against the database in `DATABASE_URL`:
+From the command line:
 
     uv run python -m forecast.replay --models daylag,ar168 \\
         --start 2020-01-01 --end 2024-12-31
 
-v1's full replay is 2020-01-01 to 2024-12-31, 1,827 delivery days, every model
-on the roster, no exclusions. The start is forced by AR-168's 730-day window
-against a record opening 2018-01-01.
+The full replay starts 2020-01-01, forced by AR-168's 730-day window against a
+record opening 2018-01-01, and by default ends on the last delivery day with a
+published price. Every forecast it writes is a backtest, and it replaces the
+backtest run held for the same model and day. A live run is never replaced
+(ADR-0011): a day that has one is skipped for that model.
 
-Each forecast run commits on its own, so a failure part-way keeps every run
-before it. The derived rows are rebuilt whole at the end **whether or not the
-day loop finished**, so the scoreboard always describes exactly the forecasts
-that are stored; then the failure is raised. Nothing is skipped quietly: a gap
-in the history a run needs stops the replay.
+The record is written once, at the end, **whether or not the day loop
+finished**, so every run made before a failure is kept; then the failure is
+raised. Nothing is skipped quietly: a gap in the history a run needs stops the
+replay. Nothing here touches the dashboard: the replay workflow turns a changed
+record into a branch, and the deploy that follows its merge exports it.
 
 A failure names where it happened. The replay runs in stages — `load`,
-`build <model>`, `forecast <model>`, `rebuild` — each logged as it starts and
+`build <model>`, `forecast <model>`, `write` — each logged as it starts and
 ends, and a failed stage raises `ReplayFailed` naming it, with the model and
-the delivery day when a forecast run was the cause. That is what makes the
-smoke replay (a wiring rehearsal on a GitHub runner) legible when it fails.
+the delivery day when a forecast run was the cause.
 """
 
 import argparse
@@ -37,19 +35,22 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, timedelta
+from pathlib import Path
 
-import psycopg
-
-from forecast.history import StoredHistory
-from forecast.loader import load_frozen_dataset
-from forecast.metrics import RebuildResult, rebuild_derived_rows
+from forecast.forecasts import (
+    FORECASTS,
+    StoredRun,
+    merge,
+    read_forecasts,
+    write_forecasts,
+)
+from forecast.loader import PRICES, repaired_history
 from forecast.models import ROSTER, build
 from forecast.runner import current_code_version, run_days
 
 log = logging.getLogger("forecast.replay")
 
 FIRST_REPLAYED_DAY = date(2020, 1, 1)
-LAST_REPLAYED_DAY = date(2024, 12, 31)
 
 
 class ReplayFailed(RuntimeError):
@@ -78,7 +79,7 @@ def stage(name: str) -> Iterator[None]:
 @dataclass(frozen=True)
 class ReplayResult:
     forecast_runs: int
-    derived: RebuildResult
+    skipped_live: int
 
 
 def delivery_days(start: date, end: date) -> list[date]:
@@ -88,58 +89,57 @@ def delivery_days(start: date, end: date) -> list[date]:
 
 
 def replay(
-    conn: psycopg.Connection,
     models: Sequence[str],
     start: date,
-    end: date,
+    end: date | None = None,
     *,
+    prices_path: Path = PRICES,
+    forecasts_path: Path = FORECASTS,
     code_version: str | None = None,
 ) -> ReplayResult:
-    """Load, forecast every model over `start`..`end` inclusive, rebuild.
-
-    Every forecast it writes is a backtest: the replay only ever runs over
-    delivery days whose observed prices are already in the frozen dataset.
-    """
+    """Forecast every model over `start`..`end` inclusive, as backtests, and
+    merge the runs into the record. `end` defaults to the last delivery day
+    with a published price."""
     # Checked here as well as in `build`, so a typo fails before the load.
-
     unknown = sorted(set(models) - set(ROSTER))
     if unknown:
         raise ValueError(f"unknown model(s) {unknown}; the roster is {sorted(ROSTER)}")
-    days = delivery_days(start, end)
     code_version = code_version or current_code_version()
 
     with stage("load"):
-        loaded = load_frozen_dataset(conn)
-        history = StoredHistory(conn)
-    log.info(
-        "the frozen dataset: %d observed, %d repaired prices new",
-        loaded.observed_inserted,
-        loaded.repaired_inserted,
-    )
-    runs = 0
+        history = repaired_history(prices_path)
+        held = read_forecasts(forecasts_path)
+    last_published = history.index[-1].date()
+    end = end or last_published
+    if end > last_published:
+        raise ValueError(f"{end} has no published price; the last is {last_published}")
+    days = delivery_days(start, end)
+    live = {r.key for r in held if r.run_type == "live"}
+
+    runs: list[StoredRun] = []
+    skipped = 0
     try:
         for slug in models:
             with stage(f"build {slug}"):
                 model = build(slug)
+            todo = [d for d in days if (d, slug) not in live]
+            skipped += len(days) - len(todo)
             with stage(f"forecast {slug}"):
-                log.info("%s: %d delivery days from %s", slug, len(days), start)
-                runs += run_days(
-                    conn,
-                    model,
-                    days,
-                    history,
-                    run_type="backtest",
-                    code_version=code_version,
+                log.info("%s: %d delivery days from %s", slug, len(todo), start)
+                runs.extend(
+                    run_days(
+                        model,
+                        todo,
+                        history,
+                        run_type="backtest",
+                        code_version=code_version,
+                    )
                 )
     finally:
-        with stage("rebuild"):
-            derived = rebuild_derived_rows(conn)
-        log.info(
-            "rebuilt %d published metrics and %d model comparisons",
-            derived.published_metrics,
-            derived.model_comparisons,
-        )
-    return ReplayResult(runs, derived)
+        with stage("write"):
+            write_forecasts(merge(held, runs), forecasts_path)
+        log.info("wrote %d forecast runs to %s", len(runs), forecasts_path)
+    return ReplayResult(len(runs), skipped)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -152,24 +152,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=f"comma-separated slugs (default: {','.join(ROSTER)})",
     )
     parser.add_argument("--start", type=date.fromisoformat, default=FIRST_REPLAYED_DAY)
-    parser.add_argument("--end", type=date.fromisoformat, default=LAST_REPLAYED_DAY)
+    parser.add_argument(
+        "--end",
+        type=date.fromisoformat,
+        default=None,
+        help="the last delivery day (default: the last with a published price)",
+    )
     args = parser.parse_args(argv)
 
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        parser.error("DATABASE_URL is not set")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     models = [m.strip() for m in args.models.split(",") if m.strip()]
-    # Autocommit, so each forecast run's transaction is a real one and commits
-    # as it finishes, rather than a savepoint inside one replay-long transaction.
-    with psycopg.connect(url, autocommit=True) as conn:
-        try:
-            result = replay(conn, models, args.start, args.end)
-        except ReplayFailed as failure:
-            if os.environ.get("GITHUB_ACTIONS"):
-                print(f"::error title=Replay failed::{failure}")
-            raise
-    log.info("done: %d forecast runs", result.forecast_runs)
+    try:
+        result = replay(models, args.start, args.end)
+    except ReplayFailed as failure:
+        if os.environ.get("GITHUB_ACTIONS"):
+            print(f"::error title=Replay failed::{failure}")
+        raise
+    log.info(
+        "done: %d forecast runs, %d live days left as they were",
+        result.forecast_runs,
+        result.skipped_live,
+    )
     return 0
 
 

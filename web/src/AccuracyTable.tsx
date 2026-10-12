@@ -5,7 +5,7 @@
  * sits in it as its own row at exactly rMAE 1.000, which is what teaches a
  * reader what the ratio means; rMAE renders bare.
  */
-import type { AccuracyResponse } from "@cz-epf/api";
+import type { AccuracyResponse } from "./types.ts";
 
 import {
   formatMetric,
@@ -18,7 +18,7 @@ import {
 export function AccuracyTable({ accuracy }: { accuracy: AccuracyResponse }) {
   return (
     <table>
-      <caption className="caption">Accuracy · every replayed day</caption>
+      <caption className="caption">Accuracy · every scored day</caption>
       <thead>
         <tr>
           <th scope="col">Model</th>

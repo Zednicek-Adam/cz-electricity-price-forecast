@@ -1,9 +1,9 @@
-"""Published metrics and the Diebold-Mariano tests, rebuilt whole.
+"""Published metrics, the running metric and the Diebold-Mariano tests.
 
-Every number the scoreboard shows is computed here, once, and stored, so every
-reader sees the same figure computed the same way and the request path never
-recalculates (ADR-0004). `CONTEXT.md` is the definition of record for every
-formula; with `e = observed - forecast` over the delivery periods in scope:
+Every number the dashboard shows is computed here, once per export, so every
+reader sees the same figure computed the same way and the browser never
+recalculates. `CONTEXT.md` is the definition of record for every formula; with
+`e = observed - forecast` over the delivery periods in scope:
 
     MAE   = mean(|e|)
     RMSE  = sqrt(mean(e^2))
@@ -11,52 +11,49 @@ formula; with `e = observed - forecast` over the delivery periods in scope:
     rMAE  = MAE(model) / MAE(day-lag naïve)
 
 Forecasts are scored against the repaired observed prices, the series the
-models were fed (ADR-0002). Backtest and live forecasts are never pooled: every
-figure is per `run_type`.
+models were fed (ADR-0002). Backtest and live forecasts are pooled into one
+record (ADR-0016); `run_type` stays on every forecast row as provenance.
 
-**The rebuild is whole** (ADR-0010). `rebuild_derived_rows` deletes every
-`published_metric` and `model_comparison` row and writes them all again from the
-stored forecasts, in one transaction, so the scoreboard can never describe a
-forecast that no longer exists. There is no incremental path: Diebold-Mariano
-rows are pairwise, so no per-model update is even well defined.
+Everything is rebuilt whole from the record on every export (ADR-0010): there
+is no incremental path, and Diebold-Mariano rows are pairwise, so no per-model
+update is even well defined.
 """
 
 import itertools
 import math
-from collections.abc import Iterable
-from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from collections.abc import Iterable, Sequence
+from datetime import date
 from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
-import psycopg
 from scipy import stats
 
+from forecast.forecasts import StoredRun
+from forecast.grid import RepairedPrice
 from forecast.models.daylag import DayLagNaive
 
 NAIVE = DayLagNaive.slug
+METRICS = ("mae", "rmse", "smape", "rmae")
 
 # A delivery period on the repaired grid, as the scored frame keys it.
-PERIOD = ["delivery_date", "period_ordinal", "resolution_minutes"]
+PERIOD = ["delivery_date", "period_ordinal"]
 
 # scope_type -> the first delivery day of the scope each scored period is in.
-# `overall` starts at the first replayed day of the run type, the same date for
-# every model, so a reader finds every model's whole-record row by one key
-# (ADR-0005: 2020-01-01 for the backtest).
+# `overall` starts at the record's first scored day, the same date for every
+# model, so every model's whole-record figure has one key.
 SCOPES = {
     "delivery_day": lambda scored: scored["delivery_date"],
     "month": lambda scored: scored["delivery_date"].dt.to_period("M").dt.start_time,
     "year": lambda scored: scored["delivery_date"].dt.to_period("Y").dt.start_time,
-    "overall": lambda scored: scored.groupby("run_type")["delivery_date"].transform(
-        "min"
+    "overall": lambda scored: pd.Series(
+        scored["delivery_date"].min(), index=scored.index
     ),
 }
 
 
 class MetricRow(NamedTuple):
     model: str
-    run_type: str
     scope_type: str
     scope_start: date
     metric: str
@@ -67,66 +64,38 @@ class MetricRow(NamedTuple):
 class ComparisonRow(NamedTuple):
     model_a: str
     model_b: str
-    run_type: str
     period_ordinal: int
-    resolution_minutes: int
     dm_statistic: float
     p_value: float
 
 
-@dataclass(frozen=True)
-class RebuildResult:
-    published_metrics: int
-    model_comparisons: int
-
-
-def rebuild_derived_rows(conn: psycopg.Connection) -> RebuildResult:
-    """Replace every published metric and model comparison, all or nothing."""
-    computed_at = datetime.now(UTC)
-    with conn.transaction():
-        scored = _scored_forecasts(conn)
-        metric_rows = _published_metrics(scored)
-        comparison_rows = _model_comparisons(scored)
-        conn.execute("DELETE FROM published_metric")
-        conn.execute("DELETE FROM model_comparison")
-        _copy(conn, "published_metric", MetricRow, metric_rows, computed_at)
-        _copy(conn, "model_comparison", ComparisonRow, comparison_rows, computed_at)
-    return RebuildResult(len(metric_rows), len(comparison_rows))
-
-
-def _copy(
-    conn: psycopg.Connection,
-    table: str,
-    shape: type[NamedTuple],
-    rows: Iterable[tuple],
-    computed_at: datetime,
-) -> None:
-    columns = ", ".join([*shape._fields, "computed_at"])
-    with conn.cursor().copy(f"COPY {table} ({columns}) FROM STDIN") as copy:
-        for row in rows:
-            copy.write_row((*row, computed_at))
-
-
-def _scored_forecasts(conn: psycopg.Connection) -> pd.DataFrame:
-    """Every stored forecast that has a repaired observed price to score it."""
-    rows = conn.execute(
-        "SELECT f.model, f.run_type, f.delivery_date, f.period_ordinal,"
-        " f.resolution_minutes, r.price, f.price"
-        " FROM forecast f JOIN repaired_observed_price r"
-        " USING (delivery_date, period_ordinal, resolution_minutes)"
-    ).fetchall()
-    scored = pd.DataFrame(
-        rows, columns=["model", "run_type", *PERIOD, "observed", "forecast"]
+def scored_forecasts(
+    runs: Iterable[StoredRun], repaired: Iterable[RepairedPrice]
+) -> pd.DataFrame:
+    """Every forecast that has a repaired observed price to score it, one row
+    per model and delivery period."""
+    observed = pd.DataFrame(
+        [(r.delivery_date, r.period_ordinal, float(r.price)) for r in repaired],
+        columns=[*PERIOD, "observed"],
     )
+    forecasts = pd.DataFrame(
+        [
+            (run.model, run.delivery_date, ordinal, price)
+            for run in runs
+            for ordinal, price in enumerate(run.prices, start=1)
+        ],
+        columns=["model", *PERIOD, "forecast"],
+    )
+    scored = forecasts.merge(observed, on=PERIOD, how="inner")
     scored["delivery_date"] = pd.to_datetime(scored["delivery_date"])
     scored["observed"] = scored["observed"].astype("float64")
     scored["forecast"] = scored["forecast"].astype("float64")
     scored["error"] = scored["observed"] - scored["forecast"]
-    return scored
+    return scored.sort_values(["model", *PERIOD], ignore_index=True)
 
 
-def _published_metrics(scored: pd.DataFrame) -> list[MetricRow]:
-    """All four metrics at all four scopes, per model and run type.
+def published_metrics(scored: pd.DataFrame) -> list[MetricRow]:
+    """All four metrics at all four scopes, per model.
 
     rMAE is `MAE(model) / MAE(day-lag naïve)` over the same scope, each MAE over
     its own scored periods, exactly as CONTEXT.md defines it. Where the naïve
@@ -143,22 +112,22 @@ def _published_metrics(scored: pd.DataFrame) -> list[MetricRow]:
     rows: list[MetricRow] = []
     for scope_type, scope_start in SCOPES.items():
         frame["scope_start"] = scope_start(frame)
-        sums = frame.groupby(["model", "run_type", "scope_start"]).agg(
+        sums = frame.groupby(["model", "scope_start"]).agg(
             n=("abs_error", "size"),
             abs_sum=("abs_error", "sum"),
             squared_sum=("squared_error", "sum"),
             smape_sum=("smape_ratio", "sum"),
         )
         mae = sums["abs_sum"] / sums["n"]
-        for (model, run_type, start), scope in sums.iterrows():
+        for (model, start), scope in sums.iterrows():
             n = int(scope["n"])
-            key = (model, run_type, scope_type, start.date())
-            rows.append(MetricRow(*key, "mae", mae[model, run_type, start], n))
+            key = (model, scope_type, start.date())
+            rows.append(MetricRow(*key, "mae", mae[model, start], n))
             rows.append(MetricRow(*key, "rmse", math.sqrt(scope["squared_sum"] / n), n))
             rows.append(MetricRow(*key, "smape", 200 * scope["smape_sum"] / n, n))
-            naive_mae = mae.get((NAIVE, run_type, start), 0.0)
+            naive_mae = mae.get((NAIVE, start), 0.0)
             if naive_mae > 0:
-                ratio = mae[model, run_type, start] / naive_mae
+                ratio = mae[model, start] / naive_mae
                 rows.append(MetricRow(*key, "rmae", ratio, n))
     return rows
 
@@ -170,7 +139,7 @@ def _smape_ratio(observed: pd.Series, forecast: pd.Series) -> pd.Series:
     return ratio.fillna(0.0)
 
 
-def _model_comparisons(scored: pd.DataFrame) -> list[ComparisonRow]:
+def model_comparisons(scored: pd.DataFrame) -> list[ComparisonRow]:
     """Diebold-Mariano tests for every ordered model pair, per period ordinal.
 
     H1 is that `model_a` is more accurate than
@@ -178,35 +147,24 @@ def _model_comparisons(scored: pd.DataFrame) -> list[ComparisonRow]:
     that fails to compute writes no row.
     """
     rows: list[ComparisonRow] = []
-    for run_type, run_type_scored in scored.groupby("run_type"):
-        by_model = {
-            model: frame.set_index(PERIOD)["error"]
-            for model, frame in run_type_scored.groupby("model")
-        }
-        for model_a, model_b in itertools.permutations(sorted(by_model), 2):
-            pair = pd.concat(
-                [by_model[model_a].rename("a"), by_model[model_b].rename("b")],
-                axis=1,
-                join="inner",
-            ).sort_index()
-            for (ordinal, resolution), bucket in pair.groupby(
-                level=["period_ordinal", "resolution_minutes"]
-            ):
-                loss = bucket["a"].abs() - bucket["b"].abs()
-                result = diebold_mariano(loss.to_numpy(), h=int(ordinal))
-                if result is not None:
-                    statistic, p_value = result
-                    rows.append(
-                        ComparisonRow(
-                            model_a,
-                            model_b,
-                            run_type,
-                            int(ordinal),
-                            int(resolution),
-                            statistic,
-                            p_value,
-                        )
-                    )
+    by_model = {
+        model: frame.set_index(PERIOD)["error"]
+        for model, frame in scored.groupby("model")
+    }
+    for model_a, model_b in itertools.permutations(sorted(by_model), 2):
+        pair = pd.concat(
+            [by_model[model_a].rename("a"), by_model[model_b].rename("b")],
+            axis=1,
+            join="inner",
+        ).sort_index()
+        for ordinal, bucket in pair.groupby(level="period_ordinal"):
+            loss = bucket["a"].abs() - bucket["b"].abs()
+            result = diebold_mariano(loss.to_numpy(), h=int(ordinal))
+            if result is not None:
+                statistic, p_value = result
+                rows.append(
+                    ComparisonRow(model_a, model_b, int(ordinal), statistic, p_value)
+                )
     return rows
 
 
@@ -240,3 +198,60 @@ def diebold_mariano(
     if not (math.isfinite(statistic) and math.isfinite(p_value)):
         return None
     return float(statistic), p_value
+
+
+class DayFigure(NamedTuple):
+    """One model's published metric for one delivery day."""
+
+    delivery_date: date
+    value: float
+    n_forecasts: int
+
+
+def _accumulate(
+    dates: Sequence[date], figures: Iterable[DayFigure], squared: bool
+) -> list[float | None]:
+    by_date = {f.delivery_date: f for f in figures}
+    total = 0.0
+    count = 0
+    values: list[float | None] = []
+    for day in dates:
+        if (figure := by_date.get(day)) is not None:
+            value = figure.value**2 if squared else figure.value
+            total += figure.n_forecasts * value
+            count += figure.n_forecasts
+        if count == 0:
+            values.append(None)
+        else:
+            values.append(math.sqrt(total / count) if squared else total / count)
+    return values
+
+
+def running(
+    metric: str,
+    dates: Sequence[date],
+    figures: Iterable[DayFigure],
+    naive_mae: Iterable[DayFigure] = (),
+) -> list[float | None]:
+    """The running metric for one model on each of `dates`: a cumulative sum
+    over a cumulative count of delivery periods, never a running mean of
+    per-day figures. Each per-day figure is weighted by its own `n_forecasts`,
+    which turns it back into the day's sum exactly:
+
+        mae, smape   carry n * value      running = sum(n * value) / sum(n)
+        rmse         carry n * value^2    running = sqrt(sum(n * value^2) / sum(n))
+        rmae         the model's running MAE over the naive's
+
+    For rMAE, `figures` are the model's per-day MAEs and `naive_mae` the
+    naive's: the ratio of two running MAEs, not a running mean of per-day
+    ratios, which one near-flat naive day would drag for the rest of the record.
+    `None` until the model's first day.
+    """
+    if metric != "rmae":
+        return _accumulate(dates, figures, squared=metric == "rmse")
+    numerator = _accumulate(dates, figures, squared=False)
+    denominator = _accumulate(dates, naive_mae, squared=False)
+    return [
+        None if value is None or not naive else value / naive
+        for value, naive in zip(numerator, denominator, strict=True)
+    ]

@@ -1,7 +1,7 @@
 /**
  * Seam 4: the real dashboard rendered in a DOM, with real visx, stubbing only
- * the network with payloads shaped by the API's own types (`fixture.ts`). The
- * tests do what a visitor does and assert on what a visitor sees.
+ * the network with files shaped by `types.ts` (`fixture.ts`). The tests do
+ * what a visitor does and assert on what a visitor sees.
  */
 import {
   act,
@@ -14,12 +14,23 @@ import {
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { forgetResponses } from "./api.ts";
-import { App, OPENING_DAY } from "./App.tsx";
-import { payloadFor } from "./fixture.ts";
+import { App } from "./App.tsx";
+import {
+  PENDING_DAY,
+  payloadFor,
+  RECORD,
+  RECORD_WITH_PENDING,
+} from "./fixture.ts";
 import { REPOSITORY_URL } from "./Footer.tsx";
+import type { RecordResponse } from "./types.ts";
+
+/** The Day view opens on the record's last day. */
+const OPENING_DAY = RECORD.last;
+
+let record: RecordResponse = RECORD;
 
 const fetchStub = vi.fn((path: string) => {
-  const payload = payloadFor(path);
+  const payload = payloadFor(path, record);
   return Promise.resolve(
     payload === undefined
       ? new Response(null, { status: 404 })
@@ -32,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  record = RECORD;
   cleanup();
   forgetResponses();
   fetchStub.mockClear();
@@ -200,6 +212,7 @@ describe("the day navigator", () => {
 
   test("the stepper and the three buttons are native controls; the ribbon is not in the accessibility tree", async () => {
     const { container } = render(<App />);
+    await screen.findByRole("img", { name: new RegExp(`^${OPENING_DAY}`) });
     await screen.findByRole("button", {
       name: "Worst day",
       disabled: false,
@@ -247,14 +260,55 @@ describe("the Over time view", () => {
 
     await screen.findByRole("img", { name: /^Running rMAE/ });
     expect(headline("Naïve")).toBe("1.000");
-    expect(requested()).toContain("/api/running/rmae");
+    expect(requested()).toContain("/data/running/rmae.json");
 
     click("Day");
     await screen.findByRole("button", {
       name: "Worst day",
       disabled: false,
     } as never);
-    await vi.waitFor(() => expect(requested()).toContain("/api/daily/rmae"));
+    await vi.waitFor(() =>
+      expect(requested()).toContain("/data/daily/rmae.json"),
+    );
+  });
+});
+
+describe("the pending day", () => {
+  test("opens the Day view on the pending forecast, with no observed line and no figures", async () => {
+    record = RECORD_WITH_PENDING;
+    render(<App />);
+
+    const chart = await screen.findByRole("img", {
+      name: new RegExp(`^${PENDING_DAY}`),
+    });
+    expect(chart.getAttribute("aria-label")).toBe(
+      `${PENDING_DAY}: the forecasts of Chronos-2, AR-168, Naïve, in EUR/MWh, by period ordinal 1 to 24.`,
+    );
+    expect(within(chart).queryByText("Observed")).toBeNull();
+    expect(screen.getByText(/^Not published yet/)).toBeTruthy();
+    expect(screen.queryAllByRole("term")).toHaveLength(0);
+  });
+
+  test("says the daily run has stopped once the pending day is no longer ahead", async () => {
+    record = RECORD_WITH_PENDING;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-01T09:00:00Z"));
+    render(<App />);
+
+    const warning = await screen.findByRole("status");
+    expect(warning.textContent).toBe(
+      `The daily run has stopped: the latest forecast is for ${PENDING_DAY}.`,
+    );
+  });
+
+  test("says nothing while the pending day is still ahead", async () => {
+    record = RECORD_WITH_PENDING;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2024-12-31T22:30:00Z")); // 23:30 in Prague
+    render(<App />);
+
+    await screen.findByRole("img", { name: new RegExp(`^${PENDING_DAY}`) });
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
 
@@ -327,10 +381,11 @@ describe("the page", () => {
     });
 
     expect([...requested()].sort()).toEqual([
-      "/api/accuracy",
-      "/api/comparisons/chronos2",
-      "/api/daily/mae",
-      `/api/days/${OPENING_DAY}`,
+      "/data/accuracy.json",
+      "/data/comparisons/chronos2.json",
+      "/data/daily/mae.json",
+      `/data/days/${OPENING_DAY}.json`,
+      "/data/record.json",
     ]);
   });
 

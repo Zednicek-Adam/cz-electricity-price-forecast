@@ -8,11 +8,15 @@
  * model's published per-day figures; nothing here computes a metric. For every
  * metric on the page a larger figure is a worse day.
  */
-import type { DailyMetricResponse, DeliveryDate } from "@cz-epf/api";
-
-import { addDays, FIRST_DAY, inRecord, LAST_DAY } from "./record.ts";
+import { addDays, inRecord } from "./record.ts";
+import type {
+  DailyMetricResponse,
+  DeliveryDate,
+  RecordResponse,
+} from "./types.ts";
 
 interface Props {
+  record: RecordResponse;
   day: DeliveryDate;
   daily: DailyMetricResponse | null;
   onPick: (day: DeliveryDate) => void;
@@ -31,7 +35,7 @@ function extreme(
   return found === undefined ? undefined : daily.deliveryDates[found];
 }
 
-export function DayNavigator({ day, daily, onPick }: Props) {
+export function DayNavigator({ record, day, daily, onPick }: Props) {
   const worst = daily && extreme(daily, (a, b) => a > b);
   const best = daily && extreme(daily, (a, b) => a < b);
   const days = daily?.deliveryDates ?? [];
@@ -42,7 +46,7 @@ export function DayNavigator({ day, daily, onPick }: Props) {
         <button
           type="button"
           aria-label="Previous delivery day"
-          disabled={day <= FIRST_DAY}
+          disabled={day <= record.first}
           onClick={() => onPick(addDays(day, -1))}
         >
           ‹
@@ -51,16 +55,18 @@ export function DayNavigator({ day, daily, onPick }: Props) {
           type="date"
           aria-label="Delivery day"
           value={day}
-          min={FIRST_DAY}
-          max={LAST_DAY}
+          min={record.first}
+          max={record.last}
           onChange={(event) => {
-            if (inRecord(event.target.value)) onPick(event.target.value);
+            if (inRecord(record, event.target.value)) {
+              onPick(event.target.value);
+            }
           }}
         />
         <button
           type="button"
           aria-label="Next delivery day"
-          disabled={day >= LAST_DAY}
+          disabled={day >= record.last}
           onClick={() => onPick(addDays(day, 1))}
         >
           ›

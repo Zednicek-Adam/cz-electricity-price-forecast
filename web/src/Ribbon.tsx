@@ -1,16 +1,16 @@
 /**
- * The ribbon: the selected metric for the headline model on every replayed
+ * The ribbon: the selected metric for the headline model on every scored
  * delivery day, as one continuous filled area beneath the Day view. It is a
  * control, not a picture — clicking it jumps the Day view to that day
  * (ADR-0007).
  *
  * It is `aria-hidden` and keyboard-inert on purpose: the date stepper and the
  * worst / best / random buttons duplicate its picker function as native
- * controls, and 1,827 points announced one by one would be noise (ADR-0009).
- * Each day has an invisible column under one delegated click handler, so the
- * pointer maps to a day without layout arithmetic.
+ * controls, and thousands of points announced one by one would be noise
+ * (ADR-0009). Each day has an invisible column under one delegated click
+ * handler, so the pointer maps to a day without layout arithmetic.
  */
-import type { DailyMetricResponse, DeliveryDate } from "@cz-epf/api";
+import type { DailyMetricResponse, DeliveryDate } from "./types.ts";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { AreaClosed, LinePath } from "@visx/shape";

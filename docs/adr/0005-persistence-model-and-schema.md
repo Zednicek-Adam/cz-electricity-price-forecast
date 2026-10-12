@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0016
 ---
 
 # Five tables on plain Postgres: one immutable record, everything else regenerable

@@ -5,11 +5,14 @@ not responsible for its content or for any forecasts derived from the data.
 Dataset:   cz-day-ahead-prices.csv
 Series:    Day-ahead prices (Transparency Regulation article 12.1.d),
            bidding zone BZN|CZ (10YCZ-CEPS-----N), EUR/MWh
-Extract:   delivery day 2018-01-01 through 2024-12-31, Europe/Prague
-           (delivery periods 2017-12-31T23:00:00Z through 2024-12-31T22:00:00Z)
-Provenance: derived from seven annual GUI_ENERGY_PRICES CSV exports downloaded
-           from the Transparency Platform for the diploma thesis this project
-           builds on, retrieved into this repository on 2026-09-02.
+Extract:   delivery day 2018-01-01 onward, Europe/Prague, extended by one
+           delivery day with each daily run
+Provenance: 2018-01-01 through 2024-12-31 derived from seven annual
+           GUI_ENERGY_PRICES CSV exports downloaded from the Transparency
+           Platform for the diploma thesis this project builds on, retrieved
+           into this repository on 2026-09-02. From 2025-01-01, fetched from
+           the Transparency Platform's RESTful API; the commit that adds a
+           delivery day is when it was retrieved.
            No price value was altered; see README.md in this directory.
 
 Re-use is under the Transparency Platform General Terms and Conditions. On a

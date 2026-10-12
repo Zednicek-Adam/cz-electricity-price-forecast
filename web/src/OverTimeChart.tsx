@@ -1,6 +1,6 @@
 /**
  * The hero chart's Over time view: the running metric for every model across
- * every replayed delivery day (ADR-0007). Each point is the metric over every
+ * every scored delivery day (ADR-0007). Each point is the metric over every
  * delivery period from 2020-01-01 up to that day, so the line is a
  * whole-record figure settling, not a day being scored. There is no observed
  * line: on a metric axis the observed price is the zero the metric is measured
@@ -10,7 +10,7 @@
  * tracking ever visibly lags here, the named fix is to memoize the path
  * strings in this file.
  */
-import type { Metric, RunningMetricResponse } from "@cz-epf/api";
+import type { Metric, RunningMetricResponse } from "./types.ts";
 import { AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";

@@ -3,7 +3,7 @@
  * both views of the hero chart, the headline numbers and the day navigator.
  * There is no per-element metric choice (ADR-0007).
  */
-import type { Metric } from "@cz-epf/api";
+import type { Metric } from "./types.ts";
 
 import { METRIC_PRESENTATION, METRICS } from "./presentation.ts";
 

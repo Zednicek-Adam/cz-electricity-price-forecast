@@ -1,21 +1,20 @@
 """The runner: everything a model is not allowed to touch (ADR-0002).
 
-It owns the day loop, the cutoff slicing, the check that the history a model
-needs is complete, and the writing. A forecast run is one model for one delivery day,
-producing 24 forecasts.
+It owns the day loop, the cutoff slicing and the check that the history a model
+needs is complete. A forecast run is one model for one delivery day, producing
+24 forecasts.
 
 **The cutoff** (`forecast.model.cutoff`) is derived from the target delivery
-day and never passed in. The runner slices every provider's history at it,
-whatever the provider returned.
+day and never passed in. The runner slices the history at it, whatever it was
+handed: the whole repaired record, read once.
 
 **Failure is loud.** A run whose required history has a gap raises
 `HistoryGap` and writes nothing: no forward-fill, no interpolation, no
 nearest-neighbour substitution. A missing day on the scoreboard is honest; a
 fabricated one is not.
 
-**A re-run replaces.** Writing a run deletes the stored
-`(model, run_type, delivery_date)` rows and inserts 24 new ones in one
-transaction, all or nothing. Never an upsert: the writer role holds no `UPDATE`.
+Writing is the caller's: the replay and the daily run turn runs into rows of
+`data/forecasts.csv` (`forecast.forecasts`).
 """
 
 import logging
@@ -25,16 +24,12 @@ import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Literal
 
 import pandas as pd
-import psycopg
 
-from forecast.grid import HOUR, REPAIRED_PERIODS_PER_DAY, RESOLUTION_MINUTES
-from forecast.history import HistoryProvider
+from forecast.forecasts import RunType, StoredRun
+from forecast.grid import HOUR, REPAIRED_PERIODS_PER_DAY
 from forecast.model import Model, cutoff
-
-RunType = Literal["backtest", "live"]
 
 log = logging.getLogger(__name__)
 
@@ -66,15 +61,29 @@ class Run:
     delivery_date: date
     prices: tuple[float, ...]
 
+    def stored(
+        self, *, run_type: RunType, code_version: str, executed_at: datetime
+    ) -> StoredRun:
+        """The run as a row of the forecast record."""
+        return StoredRun(
+            delivery_date=self.delivery_date,
+            model=self.model,
+            run_type=run_type,
+            model_version=self.model_version,
+            code_version=code_version,
+            executed_at=executed_at,
+            prices=self.prices,
+        )
 
-def run_forecast(model: Model, target_day: date, provider: HistoryProvider) -> Run:
+
+def run_forecast(model: Model, target_day: date, history: pd.Series) -> Run:
     """One forecast run: slice history at the cutoff, check it, call the model.
 
     The model receives a copy of exactly the whole days it asked for, ending at
-    the cutoff, so nothing it does can reach the provider, the store or data
-    from the target day onward.
+    the cutoff, so nothing it does can reach the record or data from the target
+    day onward.
     """
-    history = _required_history(provider(target_day), target_day, model.history_days)
+    history = _required_history(history, target_day, model.history_days)
 
     prices = model.forecast(history.copy(), target_day)
     if len(prices) != REPAIRED_PERIODS_PER_DAY or not all(
@@ -104,68 +113,29 @@ def _required_history(history: pd.Series, target_day: date, days: int) -> pd.Ser
     return history
 
 
-def write_run(
-    conn: psycopg.Connection,
-    run: Run,
-    *,
-    run_type: RunType,
-    code_version: str,
-) -> None:
-    """Replace the stored forecasts for the run's model, run type and day."""
-    executed_at = datetime.now(UTC)
-    with conn.transaction():
-        conn.execute(
-            "DELETE FROM forecast"
-            " WHERE model = %s AND run_type = %s AND delivery_date = %s",
-            (run.model, run_type, run.delivery_date),
-        )
-        with conn.cursor().copy(
-            "COPY forecast (delivery_date, period_ordinal, resolution_minutes,"
-            " model, run_type, price, model_version, code_version, executed_at)"
-            " FROM STDIN"
-        ) as copy:
-            for ordinal, price in enumerate(run.prices, start=1):
-                copy.write_row(
-                    (
-                        run.delivery_date,
-                        ordinal,
-                        RESOLUTION_MINUTES,
-                        run.model,
-                        run_type,
-                        price,
-                        run.model_version,
-                        code_version,
-                        executed_at,
-                    )
-                )
-
-
 def run_days(
-    conn: psycopg.Connection,
     model: Model,
     days: Iterable[date],
-    provider: HistoryProvider,
+    history: pd.Series,
     *,
     run_type: RunType,
     code_version: str,
-) -> int:
-    """The day loop: one forecast run per delivery day, each written as it
+) -> Iterable[StoredRun]:
+    """The day loop: one forecast run per delivery day, yielded as each one
     finishes. The first run that cannot be made raises `ForecastRunFailed`,
-    naming the model, the day and the step, and stops the loop."""
-    runs = 0
+    naming the model and the day, and stops the loop."""
     for day in days:
         try:
-            run = run_forecast(model, day, provider)
+            run = run_forecast(model, day, history)
         except Exception as error:
             raise ForecastRunFailed(model.slug, day, "forecast") from error
-        try:
-            write_run(conn, run, run_type=run_type, code_version=code_version)
-        except Exception as error:
-            raise ForecastRunFailed(model.slug, day, "write") from error
-        runs += 1
+        yield run.stored(
+            run_type=run_type,
+            code_version=code_version,
+            executed_at=datetime.now(UTC).replace(microsecond=0),
+        )
         if (day.month, day.day) == (1, 1):
             log.info("%s: reached %s", model.slug, day)
-    return runs
 
 
 def current_code_version() -> str:

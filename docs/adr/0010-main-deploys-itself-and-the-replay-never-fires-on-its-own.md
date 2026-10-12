@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: accepted, amended by ADR-0016
 ---
 
 # `main` deploys itself, the replay never fires on its own, and derived rows rebuild whole

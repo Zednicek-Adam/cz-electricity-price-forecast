@@ -1,14 +1,18 @@
-"""The replay's own top level, against a real Postgres (seam 2).
+"""The replay's own top level, on the real price record and a temporary
+forecast record (seam 2).
 
-Every assertion is on stored rows. The replays are short — the first days of
-2020, the earliest AR-168 can forecast — and run as `app_writer`.
+The replays are short: the first days of 2020, the earliest AR-168 can
+forecast.
 """
 
+from collections import Counter
+from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
-import psycopg
 import pytest
 
+from forecast.forecasts import read_forecasts, write_forecasts
 from forecast.replay import ReplayFailed, replay
 from forecast.runner import ForecastRunFailed, HistoryGap
 
@@ -16,67 +20,69 @@ START = date(2020, 1, 1)
 END = date(2020, 1, 3)
 
 
-@pytest.fixture
-def writer(db: psycopg.Connection) -> psycopg.Connection:
-    db.execute("SET LOCAL ROLE app_writer")
-    return db
+def counts(path: Path) -> Counter:
+    return Counter((r.model, r.run_type, r.code_version) for r in read_forecasts(path))
 
 
-def forecast_counts(conn: psycopg.Connection) -> list[tuple]:
-    return conn.execute(
-        "SELECT model, run_type, min(delivery_date), max(delivery_date), count(*)"
-        " FROM forecast GROUP BY 1, 2 ORDER BY 1, 2"
-    ).fetchall()
+def test_a_replay_writes_a_backtest_run_per_model_and_day(tmp_path: Path) -> None:
+    path = tmp_path / "forecasts.csv"
 
-
-def test_a_replay_loads_forecasts_and_rebuilds_everything(
-    writer: psycopg.Connection,
-) -> None:
-    result = replay(writer, ["daylag", "ar168"], START, END, code_version="abc")
+    result = replay(
+        ["daylag", "ar168"], START, END, forecasts_path=path, code_version="abc"
+    )
 
     assert result.forecast_runs == 6
-    assert forecast_counts(writer) == [
-        ("ar168", "backtest", START, END, 72),
-        ("daylag", "backtest", START, END, 72),
+    assert counts(path) == {
+        ("ar168", "backtest", "abc"): 3,
+        ("daylag", "backtest", "abc"): 3,
+    }
+    assert [r.delivery_date for r in read_forecasts(path)][::2] == [
+        date(2020, 1, 1),
+        date(2020, 1, 2),
+        date(2020, 1, 3),
     ]
-    assert writer.execute("SELECT count(*) FROM observed_price").fetchone() == (61_368,)
-    assert writer.execute(
-        "SELECT value FROM published_metric WHERE model = 'daylag'"
-        " AND scope_type = 'overall' AND scope_start = %s AND metric = 'rmae'",
-        (START,),
-    ).fetchone() == (1,)
-    pairs = writer.execute(
-        "SELECT DISTINCT model_a, model_b FROM model_comparison ORDER BY 1, 2"
-    ).fetchall()
-    assert pairs == [("ar168", "daylag"), ("daylag", "ar168")]
 
 
 def test_replaying_the_same_range_again_replaces_rather_than_adds(
-    writer: psycopg.Connection,
+    tmp_path: Path,
 ) -> None:
-    replay(writer, ["daylag"], START, END, code_version="first")
-    replay(writer, ["daylag"], START, END, code_version="second")
+    path = tmp_path / "forecasts.csv"
+    replay(["daylag"], START, END, forecasts_path=path, code_version="first")
+    replay(["daylag"], START, END, forecasts_path=path, code_version="second")
 
-    assert forecast_counts(writer) == [("daylag", "backtest", START, END, 72)]
-    assert writer.execute("SELECT DISTINCT code_version FROM forecast").fetchall() == [
-        ("second",)
-    ]
+    assert counts(path) == {("daylag", "backtest", "second"): 3}
 
 
-def test_a_run_that_cannot_be_made_stops_the_replay_and_the_scoreboard_follows(
-    db: psycopg.Connection,
+def test_a_live_run_is_left_as_it_was(tmp_path: Path) -> None:
+    path = tmp_path / "forecasts.csv"
+    replay(["daylag"], START, START, forecasts_path=path, code_version="first")
+    (run,) = read_forecasts(path)
+    write_forecasts([replace(run, run_type="live")], path)
+
+    result = replay(["daylag"], START, END, forecasts_path=path, code_version="next")
+
+    assert (result.forecast_runs, result.skipped_live) == (2, 1)
+    assert counts(path) == {
+        ("daylag", "live", "first"): 1,
+        ("daylag", "backtest", "next"): 2,
+    }
+
+
+def test_a_run_that_cannot_be_made_stops_the_replay_and_keeps_the_runs_before(
+    tmp_path: Path,
 ) -> None:
-    db.execute(
-        "INSERT INTO published_metric VALUES"
-        " ('ghost', 'backtest', 'overall', '2020-01-01', 'mae', 1, 1, now())"
-    )
-    db.execute("SET LOCAL ROLE app_writer")
+    path = tmp_path / "forecasts.csv"
 
     # AR-168 needs 730 days; the record opens 2018-01-01, so 2019-12-31 has one
-    # day too few and the replay stops there, before writing any forecast. The
-    # rebuild still runs, and the stale row goes with it.
+    # day too few and AR-168 stops there. The naïve, which ran first, is kept.
     with pytest.raises(ReplayFailed) as failure:
-        replay(db, ["ar168"], date(2019, 12, 31), END, code_version="abc")
+        replay(
+            ["daylag", "ar168"],
+            date(2019, 12, 31),
+            END,
+            forecasts_path=path,
+            code_version="abc",
+        )
 
     # The failure says where: which stage, which model, which day, and why.
     assert str(failure.value).startswith(
@@ -85,15 +91,20 @@ def test_a_run_that_cannot_be_made_stops_the_replay_and_the_scoreboard_follows(
     run = failure.value.__cause__
     assert isinstance(run, ForecastRunFailed)
     assert isinstance(run.__cause__, HistoryGap)
-
-    assert forecast_counts(db) == []
-    assert db.execute("SELECT count(*) FROM published_metric").fetchone() == (0,)
+    assert counts(path) == {("daylag", "backtest", "abc"): 4}
 
 
 def test_an_unknown_model_is_refused_before_anything_is_written(
-    writer: psycopg.Connection,
+    tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="unknown model"):
-        replay(writer, ["daylag", "lear"], START, END, code_version="abc")
+    path = tmp_path / "forecasts.csv"
 
-    assert writer.execute("SELECT count(*) FROM observed_price").fetchone() == (0,)
+    with pytest.raises(ValueError, match="unknown model"):
+        replay(["daylag", "lear"], START, END, forecasts_path=path)
+
+    assert not path.exists()
+
+
+def test_a_day_without_a_published_price_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="no published price"):
+        replay(["daylag"], START, date(2099, 1, 1), forecasts_path=tmp_path / "f.csv")
