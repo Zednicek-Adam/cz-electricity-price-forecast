@@ -1,6 +1,6 @@
 {
   // One Worker, static assets only (ADR-0016): the built client and the files
-  // `forecast.export` wrote into `public/data/`. No Worker code runs, so every
+  // `public/dashboard.json`, which `forecast.export` wrote. No Worker code runs, so every
   // request is a static asset, which is free and unmetered.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cz-epf",

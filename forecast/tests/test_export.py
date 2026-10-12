@@ -1,5 +1,5 @@
 """The export, on the real price record and a forecast record of the naïve over
-the frozen backtest, written into temporary directories."""
+the 2020–2024 backtest, written into temporary directories."""
 
 import json
 from dataclasses import replace
@@ -35,57 +35,53 @@ def runs(tmp_path_factory: pytest.TempPathFactory) -> list[StoredRun]:
     return list(naive_backtest(tmp_path_factory.getbasetemp()))
 
 
-def exported(tmp_path: Path, runs: list[StoredRun]) -> Path:
+def exported(tmp_path: Path, runs: list[StoredRun]) -> dict[str, Any]:
     forecasts = tmp_path / "forecasts.csv"
     write_forecasts(runs, forecasts)
-    out = tmp_path / "data"
+    out = tmp_path / "dashboard.json"
     export(out, forecasts_path=forecasts)
-    return out
+    return json.loads(out.read_text(encoding="utf-8"))
 
 
-def read(out: Path, name: str) -> Any:
-    return json.loads((out / name).read_text(encoding="utf-8"))
+def test_one_file_carries_every_view(tmp_path: Path, runs: list[StoredRun]) -> None:
+    dashboard = exported(tmp_path, runs)
 
-
-def test_every_view_gets_its_file(tmp_path: Path, runs: list[StoredRun]) -> None:
-    out = exported(tmp_path, runs)
-
-    assert read(out, "record.json") == {
+    assert dashboard["record"] == {
         "first": "2020-01-01",
         "last": "2024-12-31",
         "pending": None,
     }
-    assert len(list((out / "days").iterdir())) == 1827
+    assert dashboard["models"] == ["daylag"]
+    assert len(dashboard["days"]) == 1827
+    running = dashboard["running"]
     for metric in ("mae", "rmse", "smape", "rmae"):
-        running = read(out, f"running/{metric}.json")
-        assert len(running["series"][0]["values"]) == len(running["deliveryDates"])
-        assert (out / "daily" / f"{metric}.json").exists()
-    for model in ("chronos2", "ar168", "daylag"):
-        assert read(out, f"comparisons/{model}.json")["model"] == model
+        assert len(running[metric]["daylag"]) == len(running["dates"]) == 1827
+    assert dashboard["accuracy"]["daylag"]["rmae"] == 1.0
+    assert dashboard["comparisons"] == {"daylag": {}}
 
 
-def test_a_day_file_carries_the_observed_price_forecasts_and_metrics(
+def test_a_day_carries_the_observed_price_forecasts_and_metrics(
     tmp_path: Path, runs: list[StoredRun]
 ) -> None:
-    out = exported(tmp_path, runs)
+    day = exported(tmp_path, runs)["days"]["2024-03-31"]  # spring forward
 
-    day = read(out, "days/2024-03-31.json")  # spring forward, repaired to 24
-
-    assert day["deliveryDate"] == "2024-03-31"
     assert len(day["observed"]) == 24
-    assert [f["model"] for f in day["forecasts"]] == ["daylag"]
-    assert day["metrics"][0]["model"] == "daylag"
-    assert day["metrics"][0]["rmae"] == 1.0
+    assert list(day["forecasts"]) == ["daylag"]
+    assert len(day["forecasts"]["daylag"]) == 24
+    assert day["metrics"]["daylag"]["rmae"] == 1.0
 
 
-def test_the_accuracy_table_reads_the_naive_at_exactly_one(
+def test_forecasts_are_rounded_to_the_cent_and_figures_to_six_digits(
     tmp_path: Path, runs: list[StoredRun]
 ) -> None:
-    out = exported(tmp_path, runs)
+    noisy = [replace(r, prices=tuple(p + 1 / 3 for p in r.prices)) for r in runs]
 
-    (row,) = read(out, "accuracy.json")["rows"]
-    assert row["model"] == "daylag"
-    assert row["rmae"] == 1.0
+    dashboard = exported(tmp_path, noisy)
+
+    prices = dashboard["days"]["2024-06-01"]["forecasts"]["daylag"]
+    assert all(p == round(p, 2) for p in prices)
+    mae = dashboard["accuracy"]["daylag"]["mae"]
+    assert mae == float(f"{mae:.6g}")
 
 
 def test_the_pending_day_has_no_observed_price_and_no_metrics(
@@ -93,19 +89,20 @@ def test_the_pending_day_has_no_observed_price_and_no_metrics(
 ) -> None:
     last = runs[-1]
     pending = date(2099, 1, 1)
-    out = exported(
+
+    dashboard = exported(
         tmp_path, [*runs, replace(last, delivery_date=pending, run_type="live")]
     )
 
-    record = read(out, "record.json")
+    record = dashboard["record"]
     assert (record["last"], record["pending"]) == ("2099-01-01", "2099-01-01")
-    day = read(out, "days/2099-01-01.json")
+    day = dashboard["days"]["2099-01-01"]
     assert day["observed"] is None
-    assert day["metrics"] == []
-    assert len(day["forecasts"]) == 1
-    # A day between, with a price and no forecast, still has its file.
-    between = read(out, "days/2026-06-01.json")
-    assert (len(between["observed"]), between["forecasts"]) == (24, [])
+    assert day["metrics"] == {}
+    assert list(day["forecasts"]) == ["daylag"]
+    # A day between, with a price and no forecast, is still in the record.
+    between = dashboard["days"]["2026-06-01"]
+    assert (len(between["observed"]), between["forecasts"]) == (24, {})
 
 
 def test_a_hole_in_the_backtest_stops_the_export(
@@ -115,7 +112,7 @@ def test_a_hole_in_the_backtest_stops_the_export(
 
     with pytest.raises(RecordInvalid, match="every delivery day"):
         exported(tmp_path, holed)
-    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "dashboard.json").exists()
 
 
 def test_two_pending_days_stop_the_export(

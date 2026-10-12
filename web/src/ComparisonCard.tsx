@@ -9,13 +9,12 @@
  * stored tests are one-sided, so this is the stricter bar. An hour whose test
  * could not be computed is a gap in the line.
  */
-import type { ComparisonResponse, ModelSlug } from "./types.ts";
+import type { Comparison, ModelSlug } from "./types.ts";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { LinePath } from "@visx/shape";
 
-import { useJson } from "./api.ts";
 import { spreadLabels } from "./charts.ts";
 import { MODEL_LABELS, SERIES_COLOURS } from "./presentation.ts";
 
@@ -25,16 +24,13 @@ const MARGIN = { top: 14, right: 96, bottom: 26, left: 44 };
 const BAND = 1.96;
 
 interface Props {
-  model: ModelSlug;
+  comparison: Comparison;
   models: ModelSlug[];
   onModel: (model: ModelSlug) => void;
 }
 
-export function ComparisonCard({ model, models, onModel }: Props) {
-  const comparison = useJson<ComparisonResponse>(
-    `/data/comparisons/${model}.json`,
-  );
-
+export function ComparisonCard({ comparison, models, onModel }: Props) {
+  const { model } = comparison;
   return (
     <>
       <div className="card-bar">
@@ -54,14 +50,12 @@ export function ComparisonCard({ model, models, onModel }: Props) {
           ))}
         </div>
       </div>
-      {comparison.state === "ready" && (
-        <ComparisonChart comparison={comparison.data} />
-      )}
+      <ComparisonChart comparison={comparison} />
     </>
   );
 }
 
-function ComparisonChart({ comparison }: { comparison: ComparisonResponse }) {
+function ComparisonChart({ comparison }: { comparison: Comparison }) {
   const statistics = comparison.opponents.flatMap((o) =>
     o.dmStatistic.filter((v): v is number => v !== null),
   );

@@ -5,7 +5,7 @@
  * sits in it as its own row at exactly rMAE 1.000, which is what teaches a
  * reader what the ratio means; rMAE renders bare.
  */
-import type { AccuracyResponse } from "./types.ts";
+import type { ModelMetrics } from "./types.ts";
 
 import {
   formatMetric,
@@ -15,7 +15,7 @@ import {
   SERIES_COLOURS,
 } from "./presentation.ts";
 
-export function AccuracyTable({ accuracy }: { accuracy: AccuracyResponse }) {
+export function AccuracyTable({ rows }: { rows: ModelMetrics[] }) {
   return (
     <table>
       <caption className="caption">Accuracy · every scored day</caption>
@@ -30,7 +30,7 @@ export function AccuracyTable({ accuracy }: { accuracy: AccuracyResponse }) {
         </tr>
       </thead>
       <tbody>
-        {accuracy.rows.map((row) => (
+        {rows.map((row) => (
           <tr key={row.model}>
             <th scope="row">
               <span
