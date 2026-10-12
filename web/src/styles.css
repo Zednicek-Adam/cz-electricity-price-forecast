@@ -216,7 +216,6 @@ a {
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
-  overflow-x: auto;
 }
 
 .tabs [role="tab"] {
