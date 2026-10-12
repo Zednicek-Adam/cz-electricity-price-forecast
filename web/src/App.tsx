@@ -47,6 +47,7 @@ import {
   MODEL_LABELS,
   SCOPE_LABELS,
 } from "./presentation.ts";
+import { PriceCard } from "./PriceChart.tsx";
 import { ProfileChart } from "./ProfileChart.tsx";
 import { isStale, todayInPrague } from "./record.ts";
 import { Ribbon } from "./Ribbon.tsx";
@@ -83,15 +84,22 @@ export function App({ data }: { data: Dashboard }) {
   // The history the chart views cover, separate from the scoreboard's scope
   // (ADR-0018).
   const [history, setHistory] = useState<History>("whole");
+  // Electricity price chart folded state: defaults to folded on Day, unfolded on other views
+  const [isPriceFolded, setIsPriceFolded] = useState<boolean>(true);
   // The Day view opens on the record's last day, the pending forecast while
   // there is one, rather than on a day picked for how it looks.
   const [deliveryDate, setDeliveryDate] = useState<DeliveryDate>(record.last);
   const [dmModel, setDmModel] = useState<ModelSlug>(HEADLINE_MODEL);
   const [scope, setScope] = useState<Scope>("whole");
 
+  function handleViewChange(nextView: View): void {
+    setView(nextView);
+    setIsPriceFolded(nextView === "day");
+  }
+
   function openDay(day: DeliveryDate): void {
     setDeliveryDate(day);
-    setView("day");
+    handleViewChange("day");
   }
 
   return (
@@ -124,8 +132,18 @@ export function App({ data }: { data: Dashboard }) {
         </p>
       )}
       <main>
+        <PriceCard
+          data={data}
+          view={view}
+          onView={handleViewChange}
+          scope={history}
+          onScope={setHistory}
+          deliveryDate={deliveryDate}
+          isFolded={isPriceFolded}
+          onToggleFold={() => setIsPriceFolded((f) => !f)}
+        />
         <section className="card hero" aria-label="Hero chart">
-          <ViewTabs view={view} onChange={setView} />
+          <ViewTabs view={view} onChange={handleViewChange} />
           <div
             role="tabpanel"
             id="hero-panel"

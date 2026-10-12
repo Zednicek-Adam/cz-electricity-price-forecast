@@ -88,7 +88,8 @@ a {
   font-size: 13px;
 }
 
-.eyebrow {
+.eyebrow,
+.price-eyebrow {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -168,6 +169,62 @@ a {
 .hero {
   padding: 0;
   overflow: hidden;
+}
+
+.price-card {
+  margin-bottom: 20px;
+}
+
+.price-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface-2);
+  box-shadow: inset 0 -1px 0 var(--border);
+  padding-right: 16px;
+  overflow: hidden;
+}
+
+.price-top-bar .tabs {
+  box-shadow: none;
+}
+
+.fold-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 120ms;
+}
+
+.fold-toggle:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.folded-message {
+  padding: 14px 24px;
+  background: var(--surface);
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--accent);
+  opacity: 0.85;
 }
 
 .panel {
@@ -454,7 +511,8 @@ button:disabled {
   color: var(--muted);
 }
 
-.tiles-caption {
+.tiles-caption,
+.price-tiles-caption {
   margin-bottom: 8px;
 }
 

@@ -102,7 +102,7 @@ export function Tooltip({ title, rows, at }: TooltipProps) {
     >
       <div className="tooltip-title">{title}</div>
       {rows.map((row) => (
-        <div key={row.series} className="tooltip-row">
+        <div key={`${row.series}-${row.label}`} className="tooltip-row">
           <LineKey series={row.series} />
           <span>{row.label}</span>
           <span className="figure">{row.value}</span>

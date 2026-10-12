@@ -45,6 +45,9 @@ export interface Span {
  * the weekday of their delivery day, or their period ordinal. */
 export type Profile = "weekday" | "period";
 
+/** The four views of the hero chart and the electricity price chart. */
+export type View = "day" | "overTime" | Profile;
+
 /** Per metric, each model's figures, aligned with `running.dates` or with a
  * profile's buckets. */
 export type MetricSeriesByModel = Record<

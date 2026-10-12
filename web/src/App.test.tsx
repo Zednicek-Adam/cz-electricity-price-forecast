@@ -51,7 +51,8 @@ function history(name: string): void {
 }
 
 function tab(name: string): void {
-  fireEvent.click(screen.getByRole("tab", { name }));
+  const tabs = screen.getAllByRole("tab", { name });
+  fireEvent.click(tabs[0]!);
 }
 
 async function heroTitle(text: string): Promise<void> {
@@ -481,7 +482,8 @@ describe("the By hour view", () => {
 describe("the view tabs", () => {
   test("are a tab list with one tab selected, walked with the arrow keys", async () => {
     await openDay();
-    const tabs = screen.getAllByRole("tab");
+    const hero = screen.getByRole("region", { name: "Hero chart" });
+    const tabs = within(hero).getAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Day",
       "Over time",
@@ -490,14 +492,14 @@ describe("the view tabs", () => {
     ]);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
 
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
+    fireEvent.keyDown(within(hero).getByRole("tablist"), { key: "ArrowRight" });
     await heroTitle("MAE over time");
     expect(document.activeElement).toBe(
-      screen.getByRole("tab", { name: "Over time" }),
+      within(hero).getByRole("tab", { name: "Over time" }),
     );
 
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
+    fireEvent.keyDown(within(hero).getByRole("tablist"), { key: "ArrowLeft" });
+    fireEvent.keyDown(within(hero).getByRole("tablist"), { key: "ArrowLeft" });
     await heroTitle("MAE by hour");
   });
 });
@@ -623,6 +625,174 @@ describe("the Diebold–Mariano card", () => {
     await screen.findByRole("img", {
       name: /^Diebold–Mariano statistic of AR-168 against Chronos-2 and Naïve/,
     });
+  });
+});
+
+describe("the electricity price chart", () => {
+  test("sits above the main hero graph in document order", async () => {
+    await openDay();
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    const heroRegion = screen.getByRole("region", { name: "Hero chart" });
+    expect(
+      priceRegion.compareDocumentPosition(heroRegion) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("defaults to folded on the Day view, and can be unfolded", async () => {
+    await openDay();
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    expect(
+      within(priceRegion).getByRole("button", { name: "Unfold price chart" }),
+    ).toHaveProperty("ariaExpanded", "false");
+    expect(within(priceRegion).getByText(/is folded/)).toBeTruthy();
+    expect(within(priceRegion).queryByRole("img")).toBeNull();
+
+    fireEvent.click(
+      within(priceRegion).getByRole("button", { name: "Unfold price chart" }),
+    );
+    expect(
+      within(priceRegion).getByRole("button", { name: "Fold price chart" }),
+    ).toHaveProperty("ariaExpanded", "true");
+
+    const img = within(priceRegion).getByRole("img");
+    expect(img.getAttribute("aria-label")).toContain(
+      "observed electricity price",
+    );
+    expect(within(priceRegion).getByText("Observed")).toBeTruthy();
+    expect(within(priceRegion).getByText("Average price")).toBeTruthy();
+  });
+
+  test("unfolds automatically on By hour and groups hourly price distributions", async () => {
+    await openDay();
+    tab("By hour");
+
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    expect(
+      within(priceRegion).getByRole("button", { name: "Fold price chart" }),
+    ).toHaveProperty("ariaExpanded", "true");
+    expect(
+      within(priceRegion).getByRole("heading", {
+        name: "Electricity price by hour",
+      }),
+    ).toBeTruthy();
+
+    const chart = within(priceRegion).getByRole("img", {
+      name: /Electricity price distribution over the whole record, periods 1 to 24/,
+    });
+    expect(chart).toBeTruthy();
+    expect(within(priceRegion).getByText("50% of prices (IQR)")).toBeTruthy();
+    expect(
+      within(priceRegion).getByText("Full range (min – max)"),
+    ).toBeTruthy();
+  });
+
+  test("links tabs bidirectionally between the price chart and the hero chart", async () => {
+    await openDay();
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    const heroRegion = screen.getByRole("region", { name: "Hero chart" });
+
+    fireEvent.click(
+      within(priceRegion).getByRole("tab", { name: "By weekday" }),
+    );
+
+    expect(
+      within(priceRegion).getByRole("heading", {
+        name: "Electricity price by weekday",
+      }),
+    ).toBeTruthy();
+    await heroTitle("MAE by weekday");
+
+    fireEvent.click(within(heroRegion).getByRole("tab", { name: "Over time" }));
+
+    expect(
+      within(priceRegion).getByRole("heading", {
+        name: "Electricity price over time",
+      }),
+    ).toBeTruthy();
+    await heroTitle("MAE over time");
+  });
+
+  test("links the history filter between the price chart and the hero chart", async () => {
+    await openDay();
+    tab("By hour");
+
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    const heroRegion = screen.getByRole("region", { name: "Hero chart" });
+
+    fireEvent.click(
+      within(
+        within(priceRegion).getByRole("group", { name: "Price history" }),
+      ).getByRole("button", { name: "Last 7 days" }),
+    );
+
+    const priceBtn = within(
+      within(priceRegion).getByRole("group", { name: "Price history" }),
+    ).getByRole("button", { name: "Last 7 days" });
+    const heroBtn = within(
+      within(heroRegion).getByRole("group", { name: "History" }),
+    ).getByRole("button", { name: "Last 7 days" });
+
+    expect(priceBtn.getAttribute("aria-pressed")).toBe("true");
+    expect(heroBtn.getAttribute("aria-pressed")).toBe("true");
+
+    history("Whole record");
+    const wholePriceBtn = within(
+      within(priceRegion).getByRole("group", { name: "Price history" }),
+    ).getByRole("button", { name: "Whole record" });
+    expect(wholePriceBtn.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("allows folding and unfolding freely on any view", async () => {
+    await openDay();
+    tab("By hour");
+
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    expect(within(priceRegion).queryByRole("img")).not.toBeNull();
+
+    fireEvent.click(
+      within(priceRegion).getByRole("button", { name: "Fold price chart" }),
+    );
+    expect(within(priceRegion).queryByRole("img")).toBeNull();
+    expect(within(priceRegion).getByText(/is folded/)).toBeTruthy();
+
+    fireEvent.click(
+      within(priceRegion).getByRole("button", { name: "Unfold price chart" }),
+    );
+    expect(within(priceRegion).queryByRole("img")).not.toBeNull();
+  });
+
+  test("displays hourly distribution stats in crosshair tooltip on hover", async () => {
+    await openDay();
+    tab("By hour");
+
+    const priceRegion = screen.getByRole("region", {
+      name: "Electricity price chart",
+    });
+    const chart = within(priceRegion).getByRole("img", {
+      name: /Electricity price distribution/,
+    });
+    const column = chart.querySelector('[data-price-ordinal="12"]');
+    if (!column) throw new Error("no column for period 12 in price chart");
+    fireEvent.mouseEnter(column);
+
+    const tooltip = screen.getByText("Period 12").closest(".tooltip");
+    expect(tooltip?.textContent).toContain("Median");
+    expect(tooltip?.textContent).toContain("Mean");
+    expect(tooltip?.textContent).toContain("50% IQR");
+    expect(tooltip?.textContent).toContain("EUR/MWh");
   });
 });
 
