@@ -23,6 +23,16 @@ export type Metric = "mae" | "rmse" | "smape" | "rmae";
 /** A model's four metrics over one scope; `null` where a figure is undefined. */
 export type Figures = Record<Metric, number | null>;
 
+/** The two scopes the scoreboard reads: the whole record, or the trailing
+ * window of its last 30 scored delivery days (ADR-0017). */
+export type Scope = "whole" | "window";
+
+/** Per metric, each model's figures aligned with `running.dates`. */
+export type MetricSeriesByModel = Record<
+  Metric,
+  Partial<Record<ModelSlug, (number | null)[]>>
+>;
+
 export interface Dashboard {
   /** Every delivery day from `first` to `last` is in `days`. `pending` is the
    * one delivery day with forecasts and no published price yet, or null. */
@@ -38,16 +48,22 @@ export interface Dashboard {
    * cumulative sum over a cumulative count of delivery periods, and for rMAE
    * the ratio of two running MAEs. Each model's values are aligned with
    * `dates`, `null` before its first scored day. */
-  running: { dates: DeliveryDate[] } & Record<
-    Metric,
-    Partial<Record<ModelSlug, (number | null)[]>>
-  >;
-  /** Each model's four metrics over the whole record. */
-  accuracy: Partial<Record<ModelSlug, Figures>>;
-  /** Each model's Diebold–Mariano statistic against each opponent, by period
-   * ordinal minus one; `null` where the test could not be computed. */
-  comparisons: Partial<
-    Record<ModelSlug, Partial<Record<ModelSlug, (number | null)[]>>>
+  running: { dates: DeliveryDate[] } & MetricSeriesByModel;
+  /** The trailing metric on the same days (ADR-0017): each figure covers the
+   * `window.days` calendar delivery days ending on that day, `null` until a
+   * whole window fits inside the record. */
+  trailing: MetricSeriesByModel;
+  /** The last `days` delivery days up to the last scored one: the `window`
+   * scope of `accuracy` and `comparisons`. */
+  window: { days: number; first: DeliveryDate; last: DeliveryDate };
+  /** Per scope, each model's four metrics. */
+  accuracy: Record<Scope, Partial<Record<ModelSlug, Figures>>>;
+  /** Per scope, each model's Diebold–Mariano statistic against each
+   * opponent, by period ordinal minus one; `null` where the test could not be
+   * computed. */
+  comparisons: Record<
+    Scope,
+    Partial<Record<ModelSlug, Partial<Record<ModelSlug, (number | null)[]>>>>
   >;
 }
 
@@ -90,14 +106,16 @@ export interface DailyMetric {
   values: number[];
 }
 
-/** One model's running figures, aligned with `RunningMetric.deliveryDates`. */
+/** One model's running or trailing figures, aligned with `MetricOverTime.deliveryDates`. */
 export interface MetricSeries {
   model: ModelSlug;
   values: (number | null)[];
 }
 
-/** The Over time view: every model's running metric. */
-export interface RunningMetric {
+/** The Over time and 30-day views: every model's running or trailing metric
+ * on every scored delivery day. */
+export interface MetricOverTime {
+  kind: "running" | "trailing";
   metric: Metric;
   deliveryDates: DeliveryDate[];
   series: MetricSeries[];
@@ -107,5 +125,6 @@ export interface RunningMetric {
  * selected model is more accurate, on absolute loss (ADR-0005). */
 export interface Comparison {
   model: ModelSlug;
+  scope: Scope;
   opponents: { opponent: ModelSlug; dmStatistic: (number | null)[] }[];
 }

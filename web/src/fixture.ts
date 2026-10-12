@@ -74,19 +74,35 @@ function running(metric: Metric): Record<ModelSlug, number[]> {
   return { chronos2: series(0), ar168: series(1), daylag: series(2) };
 }
 
-const ACCURACY: Record<ModelSlug, Figures> = {
+/** The trailing series has no figure until a whole window fits. */
+function trailing(metric: Metric): Record<ModelSlug, (number | null)[]> {
+  const scale = metric === "rmae" ? 0.01 : 1;
+  const series = (k: number) =>
+    RUNNING_DAYS.map((_, i) => (i < 2 ? null : (30 + k * 5 - i) * scale));
+  return { chronos2: series(0), ar168: series(1), daylag: series(2) };
+}
+
+const WHOLE: Record<ModelSlug, Figures> = {
   chronos2: { mae: 16.64, rmse: 30.1, smape: 20.2, rmae: 0.638 },
   ar168: { mae: 20.114, rmse: 34.2, smape: 23.8, rmae: 0.77115 },
   daylag: { mae: 26.083, rmse: 44.8, smape: 32.0, rmae: 1 },
 };
 
+/** The last 30 days: AR-168 leads here, unlike over the whole record. */
+const WINDOW: Record<ModelSlug, Figures> = {
+  chronos2: { mae: 31.77, rmse: 44.7, smape: 29.7, rmae: 0.669 },
+  ar168: { mae: 30.2, rmse: 43.1, smape: 28.4, rmae: 0.636 },
+  daylag: { mae: 47.5, rmse: 64.0, smape: 42.9, rmae: 1 },
+};
+
 function comparisons(
   model: ModelSlug,
+  sign = 1,
 ): Partial<Record<ModelSlug, (number | null)[]>> {
   return Object.fromEntries(
     MODELS.filter((o) => o !== model).map((opponent, k) => [
       opponent,
-      hours.map((h) => (h === 23 ? null : -1 - k - h / 10)),
+      hours.map((h) => (h === 23 ? null : sign * (-1 - k - h / 10))),
     ]),
   );
 }
@@ -102,11 +118,25 @@ export const DASHBOARD: Dashboard = {
     smape: running("smape"),
     rmae: running("rmae"),
   },
-  accuracy: ACCURACY,
+  trailing: {
+    mae: trailing("mae"),
+    rmse: trailing("rmse"),
+    smape: trailing("smape"),
+    rmae: trailing("rmae"),
+  },
+  window: { days: 30, first: "2023-12-05", last: "2024-01-03" },
+  accuracy: { whole: WHOLE, window: WINDOW },
   comparisons: {
-    chronos2: comparisons("chronos2"),
-    ar168: comparisons("ar168"),
-    daylag: comparisons("daylag"),
+    whole: {
+      chronos2: comparisons("chronos2"),
+      ar168: comparisons("ar168"),
+      daylag: comparisons("daylag"),
+    },
+    window: {
+      chronos2: comparisons("chronos2", -1),
+      ar168: comparisons("ar168", -1),
+      daylag: comparisons("daylag", -1),
+    },
   },
 };
 
