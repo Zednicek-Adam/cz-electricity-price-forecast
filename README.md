@@ -184,12 +184,14 @@ its first render. Its shape is `Dashboard` in `web/src/types.ts`:
 | `record` | The first and last delivery day, and the pending day | Caption, navigator, staleness warning |
 | `days` | Per delivery day: the repaired observed price, each model's 24 forecasts and its four metrics for the day | Day view, headline numbers, ribbon, worst / best / random |
 | `running` | Each model's running metric on every scored day | Over time view |
-| `accuracy` | Each model's four metrics over the whole record | Accuracy table |
-| `comparisons` | Each model's Diebold–Mariano statistic against each opponent, by period ordinal | Diebold–Mariano card |
+| `trailing` | Each model's metric over the 30 days ending on every scored day | 30-day view |
+| `window` | The last 30 scored delivery days | 30-day view, scoreboard caption |
+| `accuracy` | Each model's four metrics, over the whole record and over the last 30 days | Over time and 30-day headline numbers, accuracy table |
+| `comparisons` | Each model's Diebold–Mariano statistic against each opponent, by period ordinal, over the whole record and over the last 30 days | Diebold–Mariano card |
 
 Forecasts are rounded to the cent and figures to six significant digits, finer
 than anything on screen; every figure is computed before rounding. The file is
-about 2.5 MB, 750 kB gzipped, and grows by about 100 kB gzipped a year.
+about 2.7 MB, 840 kB gzipped, and grows by about 110 kB gzipped a year.
 
 Before it writes anything, the export checks the records and stops on the first
 failure: every model has a forecast on each of the 1,827 days from 2020-01-01

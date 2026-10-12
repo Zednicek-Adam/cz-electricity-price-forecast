@@ -117,16 +117,38 @@ headline figure rather than managed out of it. The running rMAE is the running
 MAE of a model divided by the running MAE of the naïve, not an average of daily
 rMAEs.
 
+The **30 days** view plots the **trailing** figure instead: the metric over the
+30 delivery days ending on each day, pooled the same way. Where the running
+line settles, this one keeps moving, so it shows how the models are doing now
+and how that has changed: which model led in which season, and whether a lead
+holds. It starts on 2020-01-30, the first day with a whole window behind it.
+
 Per-day rMAE is noisy. On a calm day the naïve's error can be close to zero, so
 the ratio for that day can be very large or very small without meaning much.
-The running and whole-record figures are the stable versions.
+The running and whole-record figures are the stable versions; the 30-day
+figures sit between the two.
+
+**Two metric switches.** In the **Day** view the metric switch sits in the
+day's accuracy panel. It changes the day's figures, the ribbon and what counts
+as the worst or best day, and never the price chart, which is in EUR/MWh
+whatever the metric. In the **Over time** and **30 days** views the switch sits
+in the chart's own bar, because there it changes the chart. The two are
+separate choices.
+
+**The scoreboard's scope.** The accuracy table and the Diebold–Mariano card
+below the chart share one switch: **Whole record** or **Last 30 days**. The
+last 30 days are the 30 calendar days up to the latest delivery day with a
+published price.
 
 ## Is one model really better? The Diebold–Mariano card
 
 The **Diebold–Mariano test** asks whether one model's errors are significantly
 smaller than another's, rather than smaller by luck. It runs separately for each
 hour of the day, on absolute errors (so it tests what MAE ranks), comparing the
-two models over every day of the backtest.
+two models over every day of the record, or over the last 30 days. Thirty
+days is 30 observations per hour, so the 30-day test separates two models only
+when the gap between them is large; a statistic inside the band there means
+too few days to tell, not that the models are equal.
 
 The card plots the test **statistic** for each hour. Negative means the selected
 model's errors were smaller; the further from zero, the clearer the separation.
