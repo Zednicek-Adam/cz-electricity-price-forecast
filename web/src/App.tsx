@@ -1,6 +1,11 @@
 /**
- * The dashboard (ADR-0007, ADR-0017, ADR-0018): one hero chart with four views
- * behind tabs, then the scoreboard.
+ * The dashboard (ADR-0007, ADR-0017, ADR-0018, ADR-0019): the price chart, one
+ * hero chart with four views behind tabs, then the scoreboard.
+ *
+ * - **Price chart** — the observed price's distribution over the cut the hero
+ *   chart shows. Its tabs and history switch are the hero chart's own, drawn a
+ *   second time, so the two charts always show the same cut. It folds away,
+ *   and it is folded on the Day view, whose chart is the day's price.
  *
  * - **Day** — one delivery day's prices. Its metric selector sits in the
  *   day's accuracy panel beneath the chart, because there it rescores the
@@ -33,6 +38,8 @@ import {
   HEADLINE_MODEL,
   metricOverTime,
   metricProfile,
+  priceOverTime,
+  priceProfile,
 } from "./dashboard.ts";
 import { DayChart } from "./DayChart.tsx";
 import { DateStepper, DayJumps } from "./DayNavigator.tsx";
@@ -41,6 +48,11 @@ import { HeadlineNumbers } from "./HeadlineNumbers.tsx";
 import { Legend } from "./Legend.tsx";
 import { MetricSelector } from "./MetricSelector.tsx";
 import { OverTimeChart } from "./OverTimeChart.tsx";
+import {
+  PriceKey,
+  PriceOverTimeChart,
+  PriceProfileChart,
+} from "./PriceChart.tsx";
 import {
   formatDay,
   METRIC_PRESENTATION,
@@ -88,6 +100,9 @@ export function App({ data }: { data: Dashboard }) {
   const [deliveryDate, setDeliveryDate] = useState<DeliveryDate>(record.last);
   const [dmModel, setDmModel] = useState<ModelSlug>(HEADLINE_MODEL);
   const [scope, setScope] = useState<Scope>("whole");
+  // Whether the price chart is unfolded on the views it draws; the Day view
+  // folds it regardless (ADR-0019).
+  const [pricesOpen, setPricesOpen] = useState(true);
 
   function openDay(day: DeliveryDate): void {
     setDeliveryDate(day);
@@ -124,12 +139,31 @@ export function App({ data }: { data: Dashboard }) {
         </p>
       )}
       <main>
+        <section className="card hero prices" aria-label="Price chart">
+          <PriceCard
+            data={data}
+            view={view}
+            onView={(next) => {
+              setView(next);
+              setPricesOpen(true);
+            }}
+            history={history}
+            onHistory={setHistory}
+            open={pricesOpen}
+            onOpen={setPricesOpen}
+          />
+        </section>
         <section className="card hero" aria-label="Hero chart">
-          <ViewTabs view={view} onChange={setView} />
+          <ViewTabs
+            id="hero"
+            label="Hero chart view"
+            view={view}
+            onChange={setView}
+          />
           <div
             role="tabpanel"
             id="hero-panel"
-            aria-labelledby={`tab-${view}`}
+            aria-labelledby={`hero-tab-${view}`}
             className="panel"
           >
             {view === "day" ? (
@@ -203,11 +237,17 @@ export function App({ data }: { data: Dashboard }) {
   );
 }
 
-/** The hero chart's four views, as a tab list with arrow-key navigation. */
+/** The hero chart's four views, as a tab list with arrow-key navigation. The
+ * price chart draws the same list a second time, as `id` "price", for its
+ * own panel. */
 function ViewTabs({
+  id: list,
+  label,
   view,
   onChange,
 }: {
+  id: "hero" | "price";
+  label: string;
   view: View;
   onChange: (view: View) => void;
 }) {
@@ -225,12 +265,7 @@ function ViewTabs({
   }
 
   return (
-    <div
-      className="tabs"
-      role="tablist"
-      aria-label="Hero chart view"
-      onKeyDown={move}
-    >
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={move}>
       {VIEWS.map(({ id, label }, i) => (
         <button
           key={id}
@@ -239,9 +274,9 @@ function ViewTabs({
           }}
           type="button"
           role="tab"
-          id={`tab-${id}`}
+          id={`${list}-tab-${id}`}
           aria-selected={id === view}
-          aria-controls="hero-panel"
+          aria-controls={`${list}-panel`}
           tabIndex={id === view ? 0 : -1}
           onClick={() => onChange(id)}
         >
@@ -401,6 +436,114 @@ function ProfileView(props: ChartViewProps & { by: Profile }) {
       </div>
       <Legend series={profile.series.map((s) => s.model)} />
       <ProfileChart profile={profile} />
+    </>
+  );
+}
+
+interface PriceCardProps {
+  data: Dashboard;
+  view: View;
+  onView: (view: View) => void;
+  history: History;
+  onHistory: (history: History) => void;
+  open: boolean;
+  onOpen: (open: boolean) => void;
+}
+
+/** The price chart: a bar with the hero chart's tabs and a fold button, and
+ * beneath it, unless folded, the price over the hero chart's cut. Choosing a
+ * tab here unfolds it. */
+function PriceCard(props: PriceCardProps) {
+  const { data, view, onView, history, onHistory, open, onOpen } = props;
+  const folded = view === "day" || !open;
+
+  return (
+    <>
+      <div className="tabs-bar">
+        <h2 className="tabs-title">Price</h2>
+        <ViewTabs
+          id="price"
+          label="Price chart view"
+          view={view}
+          onChange={onView}
+        />
+        {view !== "day" && (
+          <button
+            type="button"
+            className="fold"
+            aria-expanded={open}
+            aria-controls="price-panel"
+            aria-label={open ? "Hide the price chart" : "Show the price chart"}
+            onClick={() => onOpen(!open)}
+          >
+            <span className="chevron" aria-hidden="true" />
+            {open ? "Hide" : "Show"}
+          </button>
+        )}
+      </div>
+      <div
+        role="tabpanel"
+        id="price-panel"
+        aria-labelledby={`price-tab-${view}`}
+        className="panel"
+        hidden={folded}
+      >
+        {!folded && (
+          <PriceView
+            data={data}
+            view={view}
+            history={history}
+            onHistory={onHistory}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+/** The observed price over the cut the hero chart shows: each day's or each
+ * trailing span's prices in Over time, each bucket's in a profile. */
+function PriceView({
+  data,
+  view,
+  history,
+  onHistory,
+}: {
+  data: Dashboard;
+  view: Exclude<View, "day">;
+  history: History;
+  onHistory: (history: History) => void;
+}) {
+  const title =
+    view !== "overTime"
+      ? `Price by ${view === "weekday" ? "weekday" : "hour"}`
+      : history === "whole"
+        ? "Daily price"
+        : `${data[history].days}-day price`;
+
+  return (
+    <>
+      <div className="panel-bar">
+        <div>
+          <p className="eyebrow">
+            {SCOPE_LABELS[history]} · {scopeRange(data, history)}
+          </p>
+          <h3 className="panel-title">{title}</h3>
+        </div>
+        <Segmented
+          label="Price chart history"
+          options={HISTORIES}
+          value={history}
+          onChange={onHistory}
+          name={(s) => SCOPE_LABELS[s]}
+        />
+      </div>
+      <PriceKey box={view !== "overTime"} />
+      {view === "overTime" ? (
+        <PriceOverTimeChart prices={priceOverTime(data, history)} />
+      ) : (
+        <PriceProfileChart prices={priceProfile(data, view, history)} />
+      )}
     </>
   );
 }

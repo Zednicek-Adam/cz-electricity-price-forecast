@@ -69,6 +69,32 @@ def test_one_file_carries_every_view(tmp_path: Path, runs: list[StoredRun]) -> N
     }
 
 
+def test_the_price_distributions_take_the_metrics_cuts(
+    tmp_path: Path, runs: list[StoredRun]
+) -> None:
+    dashboard = exported(tmp_path, runs)
+    prices = dashboard["prices"]
+
+    last = dashboard["days"]["2024-12-31"]["observed"]
+    assert len(prices["daily"]["mean"]) == 1827
+    assert prices["daily"]["min"][-1] == min(last)
+    assert prices["daily"]["max"][-1] == max(last)
+    for scope, days in (("window", 30), ("week", 7)):
+        trailing = prices["trailing"][scope]["median"]
+        assert trailing[: days - 1] == [None] * (days - 1)
+        assert None not in trailing[days - 1 :]
+    week = [
+        p for d in range(25, 32) for p in dashboard["days"][f"2024-12-{d}"]["observed"]
+    ]
+    assert prices["trailing"]["week"]["max"][-1] == max(week)
+    for scope in ("whole", "window", "week"):
+        profiles = prices["profiles"][scope]
+        assert len(profiles["weekday"]["median"]) == 7
+        assert len(profiles["period"]["median"]) == 24
+    # The week's Tuesday is one delivery day: 2024-12-31.
+    assert prices["profiles"]["week"]["weekday"]["min"][1] == min(last)
+
+
 def test_the_window_is_the_last_thirty_scored_days(
     tmp_path: Path, runs: list[StoredRun]
 ) -> None:

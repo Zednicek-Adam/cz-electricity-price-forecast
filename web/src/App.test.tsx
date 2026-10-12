@@ -50,8 +50,17 @@ function history(name: string): void {
   );
 }
 
+/** The hero chart's tab list; the price chart draws a second one. */
+function heroTabs(): HTMLElement {
+  return screen.getByRole("tablist", { name: "Hero chart view" });
+}
+
 function tab(name: string): void {
-  fireEvent.click(screen.getByRole("tab", { name }));
+  fireEvent.click(within(heroTabs()).getByRole("tab", { name }));
+}
+
+function heroChart(): HTMLElement {
+  return screen.getByRole("region", { name: "Hero chart" });
 }
 
 async function heroTitle(text: string): Promise<void> {
@@ -327,16 +336,16 @@ describe("the history switch", () => {
 
     history("Last 30 days");
 
-    await screen.findByRole("img", {
+    await within(heroChart()).findByRole("img", {
       name: /over the last 30 days, by weekday/,
     });
     expect(
-      screen.getByText("Last 30 days · 2023-12-05 – 2024-01-03", {
+      within(heroChart()).getByText("Last 30 days · 2023-12-05 – 2024-01-03", {
         selector: ".eyebrow",
       }),
     ).toBeTruthy();
     tab("By hour");
-    await screen.findByRole("img", {
+    await within(heroChart()).findByRole("img", {
       name: /over the last 30 days, by period/,
     });
     tab("Over time");
@@ -353,7 +362,9 @@ describe("the history switch", () => {
     await openDay();
     tab("By weekday");
     history("Last 30 days");
-    const chart = await screen.findByRole("img", { name: /by weekday/ });
+    const chart = await within(heroChart()).findByRole("img", {
+      name: /by weekday/,
+    });
 
     const column = chart.querySelector('[data-bucket="6"]');
     if (!column) throw new Error("no column for Sunday");
@@ -395,7 +406,7 @@ describe("the history switch", () => {
     await openDay();
     tab("By hour");
     history("Last 7 days");
-    const chart = await screen.findByRole("img", {
+    const chart = await within(heroChart()).findByRole("img", {
       name: /over the last 7 days, by period/,
     });
 
@@ -437,7 +448,7 @@ describe("the By weekday view", () => {
       expect(within(chart).getAllByText(day).length).toBeGreaterThan(0);
     }
     expect(
-      screen.getByText("Whole record · 2023-12-30 – 2024-01-03", {
+      within(heroChart()).getByText("Whole record · 2023-12-30 – 2024-01-03", {
         selector: ".eyebrow",
       }),
     ).toBeTruthy();
@@ -446,7 +457,9 @@ describe("the By weekday view", () => {
   test("reads out every model on the weekday under the pointer", async () => {
     await openDay();
     tab("By weekday");
-    const chart = await screen.findByRole("img", { name: /by weekday/ });
+    const chart = await within(heroChart()).findByRole("img", {
+      name: /by weekday/,
+    });
 
     const column = chart.querySelector('[data-bucket="6"]');
     if (!column) throw new Error("no column for Sunday");
@@ -481,7 +494,7 @@ describe("the By hour view", () => {
 describe("the view tabs", () => {
   test("are a tab list with one tab selected, walked with the arrow keys", async () => {
     await openDay();
-    const tabs = screen.getAllByRole("tab");
+    const tabs = within(heroTabs()).getAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Day",
       "Over time",
@@ -490,15 +503,125 @@ describe("the view tabs", () => {
     ]);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
 
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
+    fireEvent.keyDown(heroTabs(), { key: "ArrowRight" });
     await heroTitle("MAE over time");
     expect(document.activeElement).toBe(
-      screen.getByRole("tab", { name: "Over time" }),
+      within(heroTabs()).getByRole("tab", { name: "Over time" }),
     );
 
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
+    fireEvent.keyDown(heroTabs(), { key: "ArrowLeft" });
+    fireEvent.keyDown(heroTabs(), { key: "ArrowLeft" });
     await heroTitle("MAE by hour");
+  });
+});
+
+describe("the price chart", () => {
+  const priceChart = () => screen.getByRole("region", { name: "Price chart" });
+  const pricePanel = () => document.getElementById("price-panel");
+
+  test("is folded on the Day view, and unfolds on the others", async () => {
+    await openDay();
+
+    expect(pricePanel()?.hidden).toBe(true);
+    expect(within(priceChart()).queryByRole("img")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Hide the price chart" }),
+    ).toBeNull();
+
+    tab("By hour");
+
+    expect(pricePanel()?.hidden).toBe(false);
+    await within(priceChart()).findByRole("heading", { name: "Price by hour" });
+    expect(
+      within(priceChart()).getByRole("img").getAttribute("aria-label"),
+    ).toBe(
+      "The observed price over the whole record, by period ordinal 1 to 24: its median, mean, 25–75% and 10–90% ranges, in EUR/MWh.",
+    );
+  });
+
+  test("shares the hero chart's tabs and history, from either chart", async () => {
+    await openDay();
+    tab("By weekday");
+
+    history("Last 7 days");
+
+    await within(priceChart()).findByRole("img", {
+      name: /over the last 7 days, by weekday/,
+    });
+    fireEvent.click(
+      within(
+        within(priceChart()).getByRole("group", {
+          name: "Price chart history",
+        }),
+      ).getByRole("button", { name: "Last 30 days" }),
+    );
+    await within(heroChart()).findByRole("img", {
+      name: /over the last 30 days, by weekday/,
+    });
+    fireEvent.click(
+      within(
+        within(priceChart()).getByRole("tablist", { name: "Price chart view" }),
+      ).getByRole("tab", { name: "Over time" }),
+    );
+    await heroTitle("30-day MAE");
+    await within(priceChart()).findByRole("heading", { name: "30-day price" });
+  });
+
+  test("reads out a bucket's distribution, its extremes only in the readout", async () => {
+    await openDay();
+    tab("By hour");
+    history("Last 7 days");
+    const chart = await within(priceChart()).findByRole("img");
+
+    const column = chart.querySelector('[data-bucket="0"]');
+    if (!column) throw new Error("no column for period 1");
+    fireEvent.mouseEnter(column);
+
+    const tooltip = screen.getByText("Period 1").parentElement;
+    expect(tooltip?.textContent).toContain("Mean90.00");
+    expect(tooltip?.textContent).toContain("Median88.00");
+    expect(tooltip?.textContent).toContain("25–75%80.00 – 100.00");
+    expect(tooltip?.textContent).toContain("10–90%70.00 – 110.00");
+    expect(tooltip?.textContent).toContain("Min – max60.00 – 120.00");
+  });
+
+  test("over time draws each day's own prices, or the trailing span's", async () => {
+    await openDay();
+    tab("Over time");
+
+    await within(priceChart()).findByRole("heading", { name: "Daily price" });
+    expect(
+      within(priceChart()).getByRole("img").getAttribute("aria-label"),
+    ).toMatch(/^Each delivery day's observed price/);
+
+    history("Last 7 days");
+
+    await within(priceChart()).findByRole("heading", { name: "7-day price" });
+    expect(
+      within(priceChart()).getByRole("img").getAttribute("aria-label"),
+    ).toMatch(/^The observed price over the trailing 7 days/);
+  });
+
+  test("folds away, and choosing one of its tabs unfolds it", async () => {
+    await openDay();
+    tab("Over time");
+
+    click("Hide the price chart");
+
+    expect(pricePanel()?.hidden).toBe(true);
+    const show = screen.getByRole("button", { name: "Show the price chart" });
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+    tab("By hour");
+    expect(pricePanel()?.hidden).toBe(true);
+
+    fireEvent.click(
+      within(
+        within(priceChart()).getByRole("tablist", { name: "Price chart view" }),
+      ).getByRole("tab", { name: "By weekday" }),
+    );
+
+    expect(pricePanel()?.hidden).toBe(false);
+    await heroTitle("MAE by weekday");
   });
 });
 

@@ -136,6 +136,19 @@ from a Friday, and over the whole record those are its worst days. Every model
 misses far less at night than by day. The rMAE in these views divides by the
 naïve's MAE in the same bucket, so the naïve reads 1.000 at every point.
 
+**The price chart** above the hero chart shows what the price did over the
+same days, so a miss can be read against the market. It follows the hero
+chart's tab and its Whole record / Last 30 days / Last 7 days switch, and
+either chart's controls move both. In **Over time** the line is the mean price
+and the two bands hold the middle 50% and the middle 80% of the prices: each
+day's own 24 over the whole record, or the 30 or 7 days ending on each day
+otherwise. In **By weekday** and **By hour** each box holds the middle 50% of
+the prices in that bucket, with a line at the median, whiskers to the 10th
+and 90th percentiles and a dot at the mean. The lowest and highest prices are
+in the tooltip only, because one 2022 spike would flatten the rest. The chart
+is folded on the Day view, whose chart is already the day's price, and the
+Hide button folds it anywhere else.
+
 Per-day rMAE is noisy. On a calm day the naïve's error can be close to zero, so
 the ratio for that day can be very large or very small without meaning much.
 The running and whole-record figures are the stable versions; the 30-day

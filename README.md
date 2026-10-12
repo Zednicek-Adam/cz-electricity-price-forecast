@@ -189,11 +189,12 @@ its first render. Its shape is `Dashboard` in `web/src/types.ts`:
 | `week` | The last 7 scored delivery days | Chart captions |
 | `profiles` | Each model's four metrics per weekday and per period ordinal, over the whole record, the last 30 days and the last 7 | By weekday and By hour views |
 | `accuracy` | Each model's four metrics, over the whole record, the last 30 days and the last 7 | Over time headline numbers, accuracy table |
+| `prices` | The observed price's mean and percentiles on each scored day, over the 30 and the 7 days ending on each, and per weekday and per period ordinal over each history | Price chart |
 | `comparisons` | Each model's Diebold–Mariano statistic against each opponent, by period ordinal, over the whole record and over the last 30 days | Diebold–Mariano card |
 
-Forecasts are rounded to the cent and figures to six significant digits, finer
-than anything on screen; every figure is computed before rounding. The file is
-about 3.0 MB, 930 kB gzipped, and grows by about 135 kB gzipped a year.
+Forecasts and price distributions are rounded to the cent and figures to six
+significant digits, finer than anything on screen; every figure is computed before rounding. The file is
+about 3.4 MB, 1.1 MB gzipped, and grows by about 135 kB gzipped a year.
 
 Before it writes anything, the export checks the records and stops on the first
 failure: every model has a forecast on each of the 1,827 days from 2020-01-01

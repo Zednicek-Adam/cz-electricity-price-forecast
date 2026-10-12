@@ -20,6 +20,10 @@
   --series-chronos2-bright: #6da7ec;
   --series-ar168: #d4561f;
   --series-daylag: #138a5f;
+  /* The price chart's ranges: the observed price's ink, thinned. */
+  --price-outer: rgba(17, 17, 16, 0.07);
+  --price-inner: rgba(17, 17, 16, 0.16);
+  --price-box: #e4e2db;
   --warning: #b8541a;
   --radius: 14px;
   font-family:
@@ -265,6 +269,59 @@ a {
   background: var(--ink);
 }
 
+/* The price chart's bar: its title, the hero chart's tabs again, and the
+   fold button. The bar carries the rule, so the tabs inside drop theirs. */
+.tabs-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 12px 0 20px;
+  box-shadow: inset 0 -1px 0 var(--border);
+  background: var(--surface-2);
+}
+
+.tabs-bar .tabs {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.tabs-title {
+  align-self: center;
+  font-size: 14px;
+  letter-spacing: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--border-strong);
+}
+
+.fold {
+  align-self: center;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.chevron {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(1px) rotate(-135deg);
+}
+
+.fold[aria-expanded="false"] .chevron {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.panel-title {
+  font-size: 18px;
+}
+
 /* ---------- Buttons and switches ---------- */
 
 button {
@@ -394,6 +451,50 @@ button:disabled {
   flex: none;
   display: inline-block;
   vertical-align: middle;
+}
+
+/* The price chart's keys, each the shape of its mark. */
+.price-swatch {
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 16px;
+  height: 10px;
+}
+
+.price-line {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--series-observed);
+}
+
+.price-dot {
+  width: 7px;
+  height: 7px;
+  margin: 0 4.5px;
+  border-radius: 50%;
+  background: var(--series-observed);
+}
+
+.price-inner {
+  background: var(--price-inner);
+}
+
+.price-outer {
+  background: var(--price-outer);
+}
+
+.price-box {
+  border: 1px solid var(--ink-2);
+  border-radius: 2px;
+  background: var(--price-box);
+}
+
+.price-whisker {
+  width: 1px;
+  height: 12px;
+  margin: 0 7.5px;
+  background: var(--ink-2);
 }
 
 /* ---------- Headline numbers ---------- */
@@ -687,6 +788,12 @@ footer p {
   }
   .tabs [role="tab"] {
     padding: 12px 8px 10px;
+  }
+  .tabs-bar {
+    padding: 0 8px 0 12px;
+  }
+  .tabs-title {
+    padding-right: 8px;
   }
   h2 {
     font-size: 20px;

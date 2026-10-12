@@ -16,6 +16,8 @@ import type {
   MetricOverTime,
   MetricProfile,
   ModelSlug,
+  PriceOverTime,
+  PriceProfile,
   Profile,
   Scope,
 } from "./types.ts";
@@ -104,6 +106,30 @@ export function metricProfile(
       return values ? [{ model, values }] : [];
     }),
   };
+}
+
+/** The price chart's Over time view: each scored day's own prices over the
+ * whole record, or the trailing 30 or 7 days' (ADR-0019). */
+export function priceOverTime(
+  data: Dashboard,
+  history: History,
+): PriceOverTime {
+  const daily = history === "whole";
+  return {
+    kind: daily ? "daily" : "trailing",
+    days: daily ? null : data[history].days,
+    deliveryDates: data.running.dates,
+    distribution: daily ? data.prices.daily : data.prices.trailing[history],
+  };
+}
+
+/** The price chart's By weekday or By hour view, over the history's days. */
+export function priceProfile(
+  data: Dashboard,
+  by: Profile,
+  history: History,
+): PriceProfile {
+  return { by, history, distribution: data.prices.profiles[history][by] };
 }
 
 export function accuracy(data: Dashboard, scope: History): ModelMetrics[] {

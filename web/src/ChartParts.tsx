@@ -6,6 +6,7 @@
  * event belongs to the chart that draws it).
  */
 import type { ModelSlug } from "./types.ts";
+import type { ReactNode } from "react";
 
 import { LineKey } from "./Legend.tsx";
 import { SERIES_COLOURS } from "./presentation.ts";
@@ -79,7 +80,10 @@ export function EndMarker({ series, label, x, y, labelY }: EndProps) {
 }
 
 export interface TooltipRow {
-  series: SeriesKey;
+  /** The series the row reads, keyed by its line; or `key`, a key of its
+   * own, for a row that is not a series. */
+  series?: SeriesKey;
+  key?: ReactNode;
   label: string;
   value: string;
 }
@@ -102,8 +106,8 @@ export function Tooltip({ title, rows, at }: TooltipProps) {
     >
       <div className="tooltip-title">{title}</div>
       {rows.map((row) => (
-        <div key={row.series} className="tooltip-row">
-          <LineKey series={row.series} />
+        <div key={row.label} className="tooltip-row">
+          {row.key ?? (row.series ? <LineKey series={row.series} /> : <span />)}
           <span>{row.label}</span>
           <span className="figure">{row.value}</span>
         </div>

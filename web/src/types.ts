@@ -52,6 +52,15 @@ export type MetricSeriesByModel = Record<
   Partial<Record<ModelSlug, (number | null)[]>>
 >;
 
+/** The statistics a price distribution is summarised by (ADR-0019): its mean,
+ * and its minimum, 10th, 25th, 50th, 75th and 90th percentiles and maximum. */
+export type PriceStatistic =
+  "mean" | "min" | "p10" | "q1" | "median" | "q3" | "p90" | "max";
+
+/** Per statistic, the observed price's distribution, EUR/MWh, over each of a
+ * list of sets of delivery periods; `null` where a set is empty. */
+export type PriceDistribution = Record<PriceStatistic, (number | null)[]>;
+
 export interface Dashboard {
   /** Every delivery day from `first` to `last` is in `days`. `pending` is the
    * one delivery day with forecasts and no published price yet, or null. */
@@ -82,6 +91,16 @@ export interface Dashboard {
   profiles: Record<History, Record<Profile, MetricSeriesByModel>>;
   /** Per history, each model's four metrics. */
   accuracy: Record<History, Partial<Record<ModelSlug, Figures>>>;
+  /** The observed price's distribution over the cuts the metrics take
+   * (ADR-0019): each scored delivery day's own periods, aligned with
+   * `running.dates`; per trailing span, the span ending on each of those
+   * days, `null` until a whole span fits; and per history and profile, each
+   * bucket. */
+  prices: {
+    daily: PriceDistribution;
+    trailing: Record<Trailing, PriceDistribution>;
+    profiles: Record<History, Record<Profile, PriceDistribution>>;
+  };
   /** Per scope, each model's Diebold–Mariano statistic against each
    * opponent, by period ordinal minus one; `null` where the test could not be
    * computed. */
@@ -155,6 +174,25 @@ export interface MetricProfile {
   scope: History;
   metric: Metric;
   series: MetricSeries[];
+}
+
+/** The price chart's Over time view: on every scored delivery day, the
+ * distribution of that day's own prices, or of the trailing span ending on
+ * it. */
+export interface PriceOverTime {
+  kind: "daily" | "trailing";
+  /** The trailing span's length in days; null for the daily distribution. */
+  days: number | null;
+  deliveryDates: DeliveryDate[];
+  distribution: PriceDistribution;
+}
+
+/** The price chart's By weekday and By hour views: the distribution of the
+ * prices in each of a profile's buckets, over the history's days. */
+export interface PriceProfile {
+  by: Profile;
+  history: History;
+  distribution: PriceDistribution;
 }
 
 /** The Diebold–Mariano card: one model against each opponent. H1 is that the
