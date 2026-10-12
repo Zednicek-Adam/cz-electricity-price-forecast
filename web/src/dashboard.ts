@@ -12,8 +12,9 @@ import type {
   Figures,
   Metric,
   ModelMetrics,
+  MetricOverTime,
   ModelSlug,
-  RunningMetric,
+  Scope,
 } from "./types.ts";
 
 /** The model the dashboard leads with: configuration, frozen (ADR-0003). */
@@ -63,25 +64,37 @@ export function dailyMetric(data: Dashboard, metric: Metric): DailyMetric {
   return { model: HEADLINE_MODEL, metric, deliveryDates, values };
 }
 
-export function runningMetric(data: Dashboard, metric: Metric): RunningMetric {
+/** The Over time view's running metric, or the 30-day view's trailing one. */
+export function metricOverTime(
+  data: Dashboard,
+  kind: MetricOverTime["kind"],
+  metric: Metric,
+): MetricOverTime {
+  const source = kind === "running" ? data.running : data.trailing;
   return {
+    kind,
     metric,
     deliveryDates: data.running.dates,
     series: data.models.flatMap((model) => {
-      const values = data.running[metric][model];
+      const values = source[metric][model];
       return values ? [{ model, values }] : [];
     }),
   };
 }
 
-export function accuracy(data: Dashboard): ModelMetrics[] {
-  return rows(data.models, data.accuracy);
+export function accuracy(data: Dashboard, scope: Scope): ModelMetrics[] {
+  return rows(data.models, data.accuracy[scope]);
 }
 
-export function comparison(data: Dashboard, model: ModelSlug): Comparison {
-  const against = data.comparisons[model] ?? {};
+export function comparison(
+  data: Dashboard,
+  model: ModelSlug,
+  scope: Scope,
+): Comparison {
+  const against = data.comparisons[scope][model] ?? {};
   return {
     model,
+    scope,
     opponents: data.models.flatMap((opponent) => {
       const dmStatistic = against[opponent];
       return dmStatistic ? [{ opponent, dmStatistic }] : [];

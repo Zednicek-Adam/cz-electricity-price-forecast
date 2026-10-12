@@ -3,7 +3,7 @@
     uv run python -m forecast.export [--out ../web/public/dashboard.json]
 
 It reads `data/cz-day-ahead-prices.csv` and `data/forecasts.csv`, repairs the
-grid, computes every published metric, the running metric and the
+grid, computes every published metric, the running and trailing metrics and the
 Diebold-Mariano tests, and writes them into `dashboard.json`:
 
     record       the first and last delivery day, and the pending day
@@ -12,9 +12,14 @@ Diebold-Mariano tests, and writes them into `dashboard.json`:
                  each model's 24 forecasts and its four metrics for the day
     running      the scored delivery days, and per metric each model's running
                  figure on them
-    accuracy     per model, the four metrics over the whole record
-    comparisons  per model and opponent, the Diebold-Mariano statistic by
-                 period ordinal (null where it could not be computed)
+    trailing     per metric, each model's figure over the 30 delivery days
+                 ending on each of those days (null until a whole window fits)
+    window       the last 30 delivery days that have been scored
+    accuracy     per scope, the `whole` record and the last 30 days (`window`),
+                 each model's four metrics
+    comparisons  per scope as for accuracy, per model and opponent, the
+                 Diebold-Mariano statistic by period ordinal (null where it
+                 could not be computed)
 
 Its shape is `Dashboard` in `web/src/types.ts`. Forecasts are rounded to the
 cent and figures to six significant digits: finer than anything on screen, and
@@ -41,16 +46,20 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 from forecast.forecasts import FORECASTS, StoredRun, read_forecasts
 from forecast.loader import PRICES, REPO_ROOT, repaired_prices
 from forecast.metrics import (
     METRICS,
     NAIVE,
+    WINDOW_DAYS,
     DayFigure,
     model_comparisons,
     published_metrics,
     running,
     scored_forecasts,
+    trailing,
 )
 from forecast.models import ROSTER
 
@@ -170,22 +179,36 @@ def export(
 
     scored_days = sorted({f.delivery_date for fs in per_day.values() for f in fs})
     running_figures: dict[str, Any] = {"dates": [d.isoformat() for d in scored_days]}
+    trailing_figures: dict[str, Any] = {}
     for metric in METRICS:
         source = "mae" if metric == "rmae" else metric
-        running_figures[metric] = {
-            m: [
-                figure(v)
-                for v in running(
-                    metric, scored_days, per_day[m, source], per_day[NAIVE, "mae"]
-                )
-            ]
-            for m in models
-        }
+        for series, into in ((running, running_figures), (trailing, trailing_figures)):
+            into[metric] = {
+                m: [
+                    figure(v)
+                    for v in series(
+                        metric, scored_days, per_day[m, source], per_day[NAIVE, "mae"]
+                    )
+                ]
+                for m in models
+            }
 
-    comparisons: dict[str, dict[str, list[float | None]]] = {m: {} for m in models}
-    for c in model_comparisons(scored):
-        statistics = comparisons[c.model_a].setdefault(c.model_b, [None] * 24)
-        statistics[c.period_ordinal - 1] = figure(c.dm_statistic)
+    # The window scope: the last WINDOW_DAYS calendar delivery days, up to and
+    # including the last scored one.
+    window_last = scored_days[-1]
+    window_first = window_last - timedelta(days=WINDOW_DAYS - 1)
+    recent = scored[scored["delivery_date"] >= pd.Timestamp(window_first)]
+    window_overall: dict[str, dict[str, float]] = defaultdict(dict)
+    for r in published_metrics(recent):
+        if r.scope_type == "overall":
+            window_overall[r.model][r.metric] = r.value
+
+    def comparisons_of(frame: pd.DataFrame) -> dict[str, dict[str, Any]]:
+        found: dict[str, dict[str, list[float | None]]] = {m: {} for m in models}
+        for c in model_comparisons(frame):
+            statistics = found[c.model_a].setdefault(c.model_b, [None] * 24)
+            statistics[c.period_ordinal - 1] = figure(c.dm_statistic)
+        return {m: {o: found[m][o] for o in by_display_order(found[m])} for m in models}
 
     dashboard = {
         "record": {
@@ -196,10 +219,21 @@ def export(
         "models": models,
         "days": days,
         "running": running_figures,
-        "accuracy": {m: metrics_of(overall[m]) for m in models},
+        "trailing": trailing_figures,
+        "window": {
+            "days": WINDOW_DAYS,
+            "first": window_first.isoformat(),
+            "last": window_last.isoformat(),
+        },
+        "accuracy": {
+            "whole": {m: metrics_of(overall[m]) for m in models},
+            "window": {
+                m: metrics_of(window_overall[m]) for m in models if m in window_overall
+            },
+        },
         "comparisons": {
-            m: {o: comparisons[m][o] for o in by_display_order(comparisons[m])}
-            for m in models
+            "whole": comparisons_of(scored),
+            "window": comparisons_of(recent),
         },
     }
     out.parent.mkdir(parents=True, exist_ok=True)

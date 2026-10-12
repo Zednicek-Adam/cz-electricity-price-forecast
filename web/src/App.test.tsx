@@ -17,6 +17,7 @@ import { App } from "./App.tsx";
 import { loadDashboard } from "./dashboard.ts";
 import { DASHBOARD, DASHBOARD_WITH_PENDING, PENDING_DAY } from "./fixture.ts";
 import { REPOSITORY_URL } from "./Footer.tsx";
+import { formatDay } from "./presentation.ts";
 
 /** The Day view opens on the record's last day. */
 const OPENING_DAY = DASHBOARD.record.last;
@@ -40,8 +41,24 @@ function click(name: string | RegExp): void {
   fireEvent.click(screen.getByRole("button", { name }));
 }
 
+function tab(name: string): void {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
 async function heroTitle(text: string): Promise<void> {
   await screen.findByRole("heading", { level: 2, name: text });
+}
+
+/** The Day view's title: the delivery day, weekday first. */
+async function dayTitle(day: string): Promise<void> {
+  await heroTitle(formatDay(day));
+}
+
+function metricButton(name: string): HTMLElement {
+  return within(screen.getByRole("group", { name: "Metric" })).getByRole(
+    "button",
+    { name },
+  );
 }
 
 /** The Day view, loaded, with the day's figures on screen. */
@@ -107,6 +124,36 @@ describe("the Day view", () => {
     ]);
   });
 
+  test("titles the day by its weekday and date", async () => {
+    await openDay();
+
+    await heroTitle("Tue 31 Dec 2024");
+  });
+
+  test("the metric selector rescores the day and leaves the price chart alone", async () => {
+    await openDay();
+    const chart = () =>
+      screen.getByRole("img", { name: new RegExp(`^${OPENING_DAY}`) });
+    const drawn = chart().innerHTML;
+
+    fireEvent.click(metricButton("RMSE"));
+
+    expect(headline("Chronos-2")).toBe("17.0 EUR/MWh");
+    expect(chart().innerHTML).toBe(drawn);
+    // The selector lives in the day's accuracy panel, not in the chart's bar.
+    const panel = screen.getByRole("region", { name: "Day accuracy" });
+    expect(within(panel).getByRole("group", { name: "Metric" })).toBeTruthy();
+  });
+
+  test("marks the model with the lowest figure as best", async () => {
+    await openDay();
+
+    const best = screen
+      .getAllByRole("term")
+      .filter((t) => t.textContent?.endsWith("Best"));
+    expect(best.map((t) => t.textContent)).toEqual(["Chronos-2Best"]);
+  });
+
   test("the crosshair reads out every series at the hovered period, negative prices as cleared", async () => {
     await openDay();
     const chart = screen.getByRole("img", {
@@ -135,7 +182,7 @@ describe("the day navigator", () => {
 
     click("Previous delivery day");
 
-    await heroTitle("2024-12-30");
+    await dayTitle("2024-12-30");
     await screen.findByRole("img", { name: /^2024-12-30/ });
     expect(headline("Chronos-2")).toBe("20.0 EUR/MWh");
   });
@@ -144,7 +191,7 @@ describe("the day navigator", () => {
     await openDay();
 
     click("Worst day");
-    await heroTitle("2024-12-28");
+    await dayTitle("2024-12-28");
 
     click("rMAE");
     await screen.findByRole("button", {
@@ -155,18 +202,18 @@ describe("the day navigator", () => {
       await Promise.resolve();
     });
     click("Worst day");
-    await heroTitle("2024-12-30");
+    await dayTitle("2024-12-30");
   });
 
   test("best day and random land where they should", async () => {
     await openDay();
 
     click("Best day");
-    await heroTitle("2024-12-29");
+    await dayTitle("2024-12-29");
 
     vi.spyOn(Math, "random").mockReturnValue(0.3);
     click("Random");
-    await heroTitle("2024-12-28");
+    await dayTitle("2024-12-28");
   });
 
   test("clicking the ribbon jumps the Day view to that day", async () => {
@@ -180,7 +227,7 @@ describe("the day navigator", () => {
 
     fireEvent.click(column);
 
-    await heroTitle("2024-12-29");
+    await dayTitle("2024-12-29");
     await screen.findByRole("img", { name: /^2024-12-29/ });
   });
 
@@ -215,7 +262,7 @@ describe("the Over time view", () => {
     await openDay();
     expect(headline("Chronos-2")).toBe("15.0 EUR/MWh");
 
-    click("Over time");
+    tab("Over time");
 
     await heroTitle("MAE over time");
     const chart = await screen.findByRole("img", { name: /^Running MAE/ });
@@ -225,19 +272,79 @@ describe("the Over time view", () => {
     expect(screen.queryByRole("button", { name: "Worst day" })).toBeNull();
   });
 
-  test("follows the metric selector, and back in the Day view so does the navigator", async () => {
+  test("its metric selector redraws the chart, and leaves the Day view's own metric alone", async () => {
     await openDay();
-    click("Over time");
+    tab("Over time");
     await screen.findByRole("img", { name: /^Running MAE/ });
 
-    click("rMAE");
+    fireEvent.click(metricButton("rMAE"));
 
     await screen.findByRole("img", { name: /^Running rMAE/ });
+    await heroTitle("rMAE over time");
     expect(headline("Naïve")).toBe("1.000");
 
-    click("Day");
+    tab("Day");
+    expect(metricButton("MAE").getAttribute("aria-pressed")).toBe("true");
+    expect(headline("Chronos-2")).toBe("15.0 EUR/MWh");
     click("Worst day");
-    await heroTitle("2024-12-30");
+    await dayTitle("2024-12-28");
+  });
+});
+
+describe("the 30-day view", () => {
+  test("draws the trailing metric, and the headline numbers reframe to the last 30 days", async () => {
+    await openDay();
+
+    tab("30 days");
+
+    await heroTitle("30-day MAE");
+    const chart = await screen.findByRole("img", {
+      name: /^MAE over the trailing 30 days of Chronos-2, AR-168, Naïve/,
+    });
+    expect(within(chart).queryByText("Observed")).toBeNull();
+    expect(headline("Chronos-2")).toBe("31.8 EUR/MWh");
+    expect(headline("AR-168")).toBe("30.2 EUR/MWh");
+    expect(
+      screen.getByText("Last 30 days · 2023-12-05 – 2024-01-03", {
+        selector: ".tiles-caption",
+      }),
+    ).toBeTruthy();
+  });
+
+  test("shares its metric with the Over time view", async () => {
+    await openDay();
+    tab("30 days");
+
+    fireEvent.click(metricButton("SMAPE"));
+    await screen.findByRole("img", {
+      name: /^SMAPE over the trailing 30 days/,
+    });
+
+    tab("Over time");
+    await screen.findByRole("img", { name: /^Running SMAPE/ });
+  });
+});
+
+describe("the view tabs", () => {
+  test("are a tab list with one tab selected, walked with the arrow keys", async () => {
+    await openDay();
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Day",
+      "Over time",
+      "30 days",
+    ]);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
+    await heroTitle("MAE over time");
+    expect(document.activeElement).toBe(
+      screen.getByRole("tab", { name: "Over time" }),
+    );
+
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
+    await heroTitle("30-day MAE");
   });
 });
 
@@ -254,6 +361,17 @@ describe("the pending day", () => {
     expect(within(chart).queryByText("Observed")).toBeNull();
     expect(screen.getByText(/^Not published yet/)).toBeTruthy();
     expect(screen.queryAllByRole("term")).toHaveLength(0);
+  });
+
+  test("the latest-forecast chip opens the pending day from anywhere", async () => {
+    render(<App data={DASHBOARD_WITH_PENDING} />);
+    click("Previous delivery day");
+    tab("Over time");
+    await heroTitle("MAE over time");
+
+    click(/^Latest forecast/);
+
+    await dayTitle(PENDING_DAY);
   });
 
   test("says the daily run has stopped once the pending day is no longer ahead", async () => {
@@ -289,6 +407,39 @@ describe("the accuracy table", () => {
     ).toEqual(["Model", "MAE", "RMSE", "SMAPE", "rMAE"]);
     const naive = within(table).getByRole("rowheader", { name: "Naïve" });
     expect(naive.parentElement?.textContent).toBe("Naïve26.144.832.01.000");
+  });
+
+  test("sets the lowest figure in each column in bold", async () => {
+    render(<App data={DASHBOARD} />);
+    const table = await screen.findByRole("table");
+
+    expect(
+      Array.from(table.querySelectorAll("td.best")).map((td) => td.textContent),
+    ).toEqual(["16.6", "30.1", "20.2", "0.638"]);
+  });
+});
+
+describe("the scoreboard's scope", () => {
+  test("switches the table and the Diebold–Mariano card to the last 30 days together", async () => {
+    render(<App data={DASHBOARD} />);
+    const whole = (await screen.findByRole("img", { name: /^Diebold–Mariano/ }))
+      .innerHTML;
+
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Scope" })).getByRole("button", {
+        name: "Last 30 days",
+      }),
+    );
+
+    const table = screen.getByRole("table");
+    const ar168 = within(table).getByRole("rowheader", { name: "AR-168" });
+    expect(ar168.parentElement?.textContent).toBe("AR-16830.243.128.40.636");
+    expect(
+      screen.getByRole("img", { name: /^Diebold–Mariano/ }).innerHTML,
+    ).not.toBe(whole);
+    expect(
+      screen.getByText("Last 30 days · 2023-12-05 – 2024-01-03"),
+    ).toBeTruthy();
   });
 });
 

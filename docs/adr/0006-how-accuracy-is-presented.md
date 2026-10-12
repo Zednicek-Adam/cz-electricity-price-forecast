@@ -7,6 +7,10 @@ status: accepted
 > **Amended by [ADR-0007](0007-the-dashboards-ten-second-story.md).** Building the
 > dashboard removed three of this ADR's rules: the hero triple, the
 > per-year-breakdown-adjacent rule, and the rMAE qualifier. The rest stands.
+>
+> **Amended by [ADR-0017](0017-three-views-two-metric-switches-and-a-30-day-window.md).**
+> Rolling windows are no longer rejected: once the record became live, the
+> last 30 days are a real month of forecasts, and the dashboard shows them.
 
 The scoreboard leads with a **triple** — the headline model's MAE, the day-lag
 naïve's MAE, and the rMAE ratio between them — scoped to the whole replay,

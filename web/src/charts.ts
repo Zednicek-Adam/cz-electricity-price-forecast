@@ -27,3 +27,10 @@ export function paddedDomain(
   const pad = (hi - lo || 1) * fraction;
   return [lo - pad, hi + pad];
 }
+
+/** An axis tick as a clean number: no trailing zeros, at most three
+ * decimals. Figures elsewhere keep their metric's fixed precision; a tick is
+ * a position, not a figure. */
+export function formatTick(value: number): string {
+  return String(Number(value.toFixed(3)));
+}

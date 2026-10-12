@@ -1,30 +1,31 @@
 /**
- * The metric selector: one control choosing the metric for the whole page —
- * both views of the hero chart, the headline numbers and the day navigator.
- * There is no per-element metric choice (ADR-0007).
+ * The metric selector: MAE, RMSE, SMAPE or rMAE. There are two on the page,
+ * one per thing a metric can drive, each placed beside what it changes
+ * (ADR-0017): in the Day view it sits in the day's accuracy panel and rescores
+ * the day, the ribbon and the day navigator, leaving the price chart alone; in
+ * the Over time and 30-day views it sits in the chart's own bar and redraws
+ * the chart.
  */
 import type { Metric } from "./types.ts";
 
 import { METRIC_PRESENTATION, METRICS } from "./presentation.ts";
+import { Segmented } from "./Segmented.tsx";
 
 interface Props {
   metric: Metric;
   onChange: (metric: Metric) => void;
+  size?: "regular" | "small";
 }
 
-export function MetricSelector({ metric, onChange }: Props) {
+export function MetricSelector({ metric, onChange, size }: Props) {
   return (
-    <div role="group" aria-label="Metric" className="toggle-group">
-      {METRICS.map((m) => (
-        <button
-          key={m}
-          type="button"
-          aria-pressed={m === metric}
-          onClick={() => onChange(m)}
-        >
-          {METRIC_PRESENTATION[m].label}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Metric"
+      options={METRICS}
+      value={metric}
+      onChange={onChange}
+      name={(m) => METRIC_PRESENTATION[m].label}
+      size={size}
+    />
   );
 }

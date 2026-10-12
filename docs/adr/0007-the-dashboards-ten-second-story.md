@@ -7,6 +7,11 @@ status: accepted
 > **Open question settled by [ADR-0015](0015-the-running-metric-is-computed-in-the-worker.md):**
 > the running metric is derived in the Worker from the per-day published
 > metrics, and is not stored.
+>
+> **Amended by [ADR-0017](0017-three-views-two-metric-switches-and-a-30-day-window.md).**
+> The hero chart gains a third view, 30 days; the one metric selector becomes
+> two, each beside what it changes; and the scoreboard gains a last-30-days
+> scope. That ADR is also the front-end quality pass deferred below.
 
 The dashboard leads with **a single hero chart carrying two views**, switched in
 place and sharing one metric selector:
