@@ -4,7 +4,8 @@
 
 It reads `data/cz-day-ahead-prices.csv` and `data/forecasts.csv`, repairs the
 grid, computes every published metric, the running and trailing metrics, the
-profiles and the Diebold-Mariano tests, and writes them into `dashboard.json`:
+profiles, the Diebold-Mariano tests and the observed price's distributions, and
+writes them into `dashboard.json`:
 
     record       the first and last delivery day, and the pending day
     models       the models in the record, in the order the dashboard lists them
@@ -22,15 +23,19 @@ profiles and the Diebold-Mariano tests, and writes them into `dashboard.json`:
                  metric, each model's figure on each weekday from Monday, or at
                  each period ordinal
     accuracy     per scope as for profiles, each model's four metrics
+    prices       the observed price's distribution (ADR-0019), per statistic:
+                 `daily` on each scored day, `trailing` per window scope over
+                 the window ending on each, and `profiles` per scope and
+                 profile in each bucket, the same cuts the metrics take
     comparisons  per scope, `whole` and `window` only, per model and opponent,
                  the Diebold-Mariano statistic by period ordinal (null where it
                  could not be computed)
 
-Its shape is `Dashboard` in `web/src/types.ts`. Forecasts are rounded to the
-cent and figures to six significant digits: finer than anything on screen, and
-every figure is computed before rounding. The file is rebuilt whole on every
-deploy, so the dashboard can never describe a forecast the record no longer
-holds (ADR-0010).
+Its shape is `Dashboard` in `web/src/types.ts`. Forecasts and the price
+distributions are rounded to the cent and figures to six significant digits:
+finer than anything on screen, and every figure is computed before rounding.
+The file is rebuilt whole on every deploy, so the dashboard can never describe
+a forecast the record no longer holds (ADR-0010).
 
 Before it writes, it checks the record and stops on the first failure:
 
@@ -53,6 +58,7 @@ from typing import Any
 
 import pandas as pd
 
+from forecast import distribution
 from forecast.forecasts import FORECASTS, StoredRun, read_forecasts
 from forecast.loader import PRICES, REPO_ROOT, repaired_prices
 from forecast.metrics import (
@@ -266,6 +272,17 @@ def export(
         "accuracy": {
             scope: {m: metrics_of(by_model[m]) for m in models if m in by_model}
             for scope, by_model in scope_overall.items()
+        },
+        "prices": {
+            "daily": distribution.daily(observed, scored_days),
+            "trailing": {
+                scope: distribution.trailing(observed, scored_days, days)
+                for scope, days in WINDOWS.items()
+            },
+            "profiles": {
+                scope: {by: distribution.profile(frame, by) for by in PROFILES}
+                for scope, frame in frames.items()
+            },
         },
         # The Diebold-Mariano test needs more than a week of days per hour.
         "comparisons": {

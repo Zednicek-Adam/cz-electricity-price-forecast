@@ -11,6 +11,7 @@ import type {
   Metric,
   MetricSeriesByModel,
   ModelSlug,
+  PriceDistribution,
 } from "./types.ts";
 
 export const DAYS = [
@@ -125,6 +126,26 @@ function profiles(count: number, shift: number): MetricSeriesByModel {
   };
 }
 
+/** A price distribution over `count` groups: group `i` centres on
+ * `base + 10i`, its quartiles 10 either side, its 10–90% 20 and its extremes
+ * 30, its median 2 below the mean. No figure before group `from`. */
+function prices(count: number, base: number, from = 0): PriceDistribution {
+  const at = (offset: number) =>
+    Array.from({ length: count }, (_, i) =>
+      i < from ? null : base + 10 * i + offset,
+    );
+  return {
+    mean: at(0),
+    min: at(-30),
+    p10: at(-20),
+    q1: at(-10),
+    median: at(-2),
+    q3: at(10),
+    p90: at(20),
+    max: at(30),
+  };
+}
+
 const WHOLE: Record<ModelSlug, Figures> = {
   chronos2: { mae: 16.64, rmse: 30.1, smape: 20.2, rmae: 0.638 },
   ar168: { mae: 20.114, rmse: 34.2, smape: 23.8, rmae: 0.77115 },
@@ -177,6 +198,18 @@ export const DASHBOARD: Dashboard = {
     week: { weekday: profiles(7, 20), period: profiles(24, 20) },
   },
   accuracy: { whole: WHOLE, window: WINDOW, week: WEEK },
+  prices: {
+    daily: prices(RUNNING_DAYS.length, 60),
+    trailing: {
+      window: prices(RUNNING_DAYS.length, 80, 2),
+      week: prices(RUNNING_DAYS.length, 70, 1),
+    },
+    profiles: {
+      whole: { weekday: prices(7, 50), period: prices(24, 50) },
+      window: { weekday: prices(7, 70), period: prices(24, 70) },
+      week: { weekday: prices(7, 90), period: prices(24, 90) },
+    },
+  },
   comparisons: {
     whole: {
       chronos2: comparisons("chronos2"),
