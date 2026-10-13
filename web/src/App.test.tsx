@@ -625,6 +625,135 @@ describe("the price chart", () => {
   });
 });
 
+describe("the min–max switch", () => {
+  const priceChart = () => screen.getByRole("region", { name: "Price chart" });
+
+  test("draws each bucket's extremes beyond its whiskers, and takes them away", async () => {
+    await openDay();
+    tab("By hour");
+    const toggle = screen.getByRole("switch", { name: "Min – max" });
+    const chart = () => within(priceChart()).getByRole("img");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(chart().querySelectorAll(".extremes")).toHaveLength(0);
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(chart().querySelectorAll(".extremes")).toHaveLength(24);
+    expect(chart().getAttribute("aria-label")).toContain("minimum and maximum");
+    const legend = within(priceChart()).getByRole("list", { name: "Legend" });
+    expect(legend.textContent).toContain("Min – max");
+
+    tab("By weekday");
+    expect(chart().querySelectorAll(".extremes")).toHaveLength(7);
+    fireEvent.click(screen.getByRole("switch", { name: "Min – max" }));
+    expect(chart().querySelectorAll(".extremes")).toHaveLength(0);
+  });
+
+  test("is only offered on the box plots", async () => {
+    await openDay();
+    tab("Over time");
+
+    expect(screen.queryByRole("switch", { name: "Min – max" })).toBeNull();
+  });
+});
+
+describe("the zoom", () => {
+  const priceChart = () =>
+    within(screen.getByRole("region", { name: "Price chart" })).getByRole(
+      "img",
+    );
+  const overTime = () =>
+    within(heroChart()).getByRole("img", { name: /^Running MAE/ });
+  const span = (chart: HTMLElement) =>
+    /from (\S+) to (\S+)\.$/
+      .exec(chart.getAttribute("aria-label") ?? "")
+      ?.slice(1, 3);
+
+  /** jsdom lays nothing out: give every chart the viewBox's own width, so a
+   * clientX is a viewBox x. */
+  function layOut(): void {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 960,
+      height: 340,
+    } as DOMRect);
+  }
+
+  test("the date inputs zoom both Over time charts to the same days", async () => {
+    await openDay();
+    tab("Over time");
+    expect(span(overTime())).toEqual(["2023-12-30", "2024-01-03"]);
+
+    const [from] = screen.getAllByLabelText("Zoom from");
+    fireEvent.change(from as HTMLElement, { target: { value: "2024-01-01" } });
+
+    expect(span(overTime())).toEqual(["2024-01-01", "2024-01-03"]);
+    expect(span(priceChart())).toEqual(["2024-01-01", "2024-01-03"]);
+    // Every zoom bar shows the zoom, whichever was used.
+    for (const input of screen.getAllByLabelText("Zoom from")) {
+      expect((input as HTMLInputElement).value).toBe("2024-01-01");
+    }
+  });
+
+  test("dragging across either chart zooms both, and a double-click resets", async () => {
+    layOut();
+    await openDay();
+    tab("Over time");
+    // Five days: day i sits at x = 48 + 204i.
+    const chart = priceChart();
+
+    fireEvent.mouseDown(chart, { clientX: 252, button: 0 });
+    fireEvent.mouseMove(chart, { clientX: 660 });
+    expect(chart.querySelector(".zoom-selection")).toBeTruthy();
+    fireEvent.mouseUp(chart, { clientX: 660 });
+
+    expect(span(priceChart())).toEqual(["2023-12-31", "2024-01-02"]);
+    expect(span(overTime())).toEqual(["2023-12-31", "2024-01-02"]);
+
+    fireEvent.doubleClick(overTime());
+
+    expect(span(priceChart())).toEqual(["2023-12-30", "2024-01-03"]);
+  });
+
+  test("a click is not a zoom", async () => {
+    layOut();
+    await openDay();
+    tab("Over time");
+
+    fireEvent.mouseDown(overTime(), { clientX: 252, button: 0 });
+    fireEvent.mouseUp(overTime(), { clientX: 300 });
+
+    expect(span(overTime())).toEqual(["2023-12-30", "2024-01-03"]);
+  });
+
+  test("holds across the history switch, and the reset button undoes it", async () => {
+    await openDay();
+    tab("Over time");
+    const [to] = screen.getAllByLabelText("Zoom to");
+    fireEvent.change(to as HTMLElement, { target: { value: "2024-01-01" } });
+
+    history("Last 7 days");
+
+    const trailing = within(heroChart()).getByRole("img", {
+      name: /^MAE over the trailing 7 days/,
+    });
+    expect(span(trailing)).toEqual(["2023-12-30", "2024-01-01"]);
+    expect(span(priceChart())).toEqual(["2023-12-30", "2024-01-01"]);
+
+    const [reset] = screen.getAllByRole("button", { name: "Reset zoom" });
+    fireEvent.click(reset as HTMLElement);
+
+    expect(span(priceChart())).toEqual(["2023-12-30", "2024-01-03"]);
+    for (const button of screen.getAllByRole("button", {
+      name: "Reset zoom",
+    })) {
+      expect(button).toHaveProperty("disabled", true);
+    }
+  });
+});
+
 describe("the pending day", () => {
   test("opens the Day view on the pending forecast, with no observed line and no figures", async () => {
     render(<App data={DASHBOARD_WITH_PENDING} />);

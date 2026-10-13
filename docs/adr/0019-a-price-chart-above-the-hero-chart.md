@@ -30,15 +30,26 @@ only place the observed price is drawn, and it shows one day.
   The box runs from the 25th to the 75th percentile, with a line at the
   median, whiskers to the 10th and 90th and a dot at the mean.
 
-The minimum and maximum appear in the tooltip and not on the plot. One 2022
-spike or one negative midday hour would otherwise set the scale and flatten
-everything else.
+The minimum and maximum appear in the tooltip, and on the box plots only
+with the **min–max switch** on. It then draws a dashed whisker from each box
+out to the bucket's extremes, and the scale grows to hold them. It is off by
+default because one 2022 spike or one negative midday hour would set the
+scale and flatten everything else.
 
 **It follows the hero chart, it does not compete with it.** Its tabs and its
 history switch are the hero chart's own state, drawn a second time, so the
 two charts always show the same cut and either chart's controls move both. It
 has no metric switch and no model series. It has the hero chart's width and
 margins, so its x axis lines up with the one below it.
+
+**The two Over time views share a zoom.** Over the whole record a season
+is a few pixels wide. Dragging across either Over time chart zooms both to
+the days the drag covered, and a double-click returns to the whole record.
+The y axis fits the days drawn and the x axis ticks get finer as the span
+shrinks: years, then months, then days. The drag is mouse-only, like the
+ribbon (ADR-0009). Its accessible form is the zoom bar under each chart: two
+native date inputs and a reset button. The zoom is page state, like the view
+and the history, so it holds across the history switch and across tabs.
 
 **It folds.** A button in its bar hides it, and choosing one of its tabs
 shows it again. On the Day view it is folded and the button is gone, because
@@ -64,6 +75,13 @@ would ever do.
 to show the cut the hero chart shows, so separate state would only let the
 two drift apart.
 
+**Zooming each chart on its own.** Rejected for the same reason: two charts
+over different days do not compare.
+
+**Wheel or pinch zoom.** Not built: the page scrolls, and a chart that takes
+the wheel traps the reader scrolling past it. A drag starts nothing by
+accident.
+
 **A price line in the hero chart's metric views.** Rejected for the reason
 the Over time view has no observed line: on a metric axis the price is not a
 series (ADR-0007).
@@ -75,5 +93,7 @@ series (ADR-0007).
   spans.
 - Over the last 7 days an hour's box stands on 7 prices and a weekday's on
   24, so its whiskers sit close to its extremes.
+- The headline numbers in Over time stay the whole record's or the window's.
+  The zoom changes what is drawn, not what is published.
 - There are two tab lists with the same four tabs. Each is labelled for its
   chart, and each controls its own panel.

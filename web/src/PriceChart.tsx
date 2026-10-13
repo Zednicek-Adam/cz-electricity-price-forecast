@@ -10,14 +10,17 @@
  *   the 75th percentile, the median across it, whiskers to the 10th and 90th
  *   and the mean as a dot.
  *
- * The extremes are in the tooltip, not on the plot: a 2022 spike or a sunny
- * Sunday's negative hour would flatten everything else. The chart has the
- * hero chart's width and margins, so its x axis lines up with the one below.
+ * The extremes are in the tooltip, and on the plot only when the min–max
+ * switch is on, as a dashed whisker beyond each box: a 2022 spike or a sunny
+ * Sunday's negative hour would otherwise flatten everything else. Over time
+ * shares the hero chart's zoom. The chart has the hero chart's width and
+ * margins, so its x axis lines up with the one below.
  */
 import type {
   PriceDistribution,
   PriceOverTime,
   PriceProfile,
+  PriceStatistic,
 } from "./types.ts";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
@@ -25,19 +28,26 @@ import { scaleLinear } from "@visx/scale";
 import { Area, LinePath } from "@visx/shape";
 import { useState, type MouseEvent } from "react";
 
-import { TICK_LABEL, Tooltip, YGrid, type TooltipRow } from "./ChartParts.tsx";
+import {
+  TICK_LABEL,
+  TimeAxis,
+  Tooltip,
+  YGrid,
+  type TooltipRow,
+} from "./ChartParts.tsx";
 import { formatTick, paddedDomain } from "./charts.ts";
 import { formatPrice, SCOPE_LABELS, WEEKDAYS } from "./presentation.ts";
-import { yearStarts } from "./record.ts";
+import { Selection, useDragZoom, zoomRange, type Zoom } from "./Zoom.tsx";
 
 const WIDTH = 960;
 const HEIGHT = 260;
 const MARGIN = { top: 26, right: 96, bottom: 30, left: 48 };
 const BOTTOM = HEIGHT - MARGIN.bottom;
 
-/** The scale spans the 10–90% ranges; the extremes do not set it. */
-function priceScale(d: PriceDistribution) {
-  const values = [...d.p10, ...d.p90].filter((v): v is number => v !== null);
+/** The scale spans the 10–90% ranges, or the extremes when they are drawn. */
+function priceScale(d: PriceDistribution, extremes = false) {
+  const [lo, hi] = extremes ? [d.min, d.max] : [d.p10, d.p90];
+  const values = [...lo, ...hi].filter((v): v is number => v !== null);
   return scaleLinear({
     domain: paddedDomain(values.length ? values : [0, 1], 0.08),
     range: [BOTTOM, MARGIN.top],
@@ -65,6 +75,7 @@ function marks(box: boolean) {
     median: swatch("line"),
     inner: swatch(box ? "box" : "inner"),
     outer: swatch(box ? "whisker" : "outer"),
+    extremes: swatch("extremes"),
   };
 }
 
@@ -89,12 +100,22 @@ function readout(d: PriceDistribution, i: number, box: boolean): TooltipRow[] {
       label: "10–90%",
       value: range(d.p10[i] ?? null, d.p90[i] ?? null),
     },
-    { label: "Min – max", value: range(d.min[i] ?? null, d.max[i] ?? null) },
+    {
+      key: box ? key.extremes : undefined,
+      label: "Min – max",
+      value: range(d.min[i] ?? null, d.max[i] ?? null),
+    },
   ];
 }
 
 /** What the marks mean, above the chart, where the hero chart's legend is. */
-export function PriceKey({ box }: { box: boolean }) {
+export function PriceKey({
+  box,
+  extremes = false,
+}: {
+  box: boolean;
+  extremes?: boolean;
+}) {
   const key = marks(box);
   return (
     <ul className="legend" aria-label="Legend">
@@ -116,6 +137,12 @@ export function PriceKey({ box }: { box: boolean }) {
         {key.outer}
         10–90%
       </li>
+      {extremes && (
+        <li>
+          {key.extremes}
+          Min – max
+        </li>
+      )}
     </ul>
   );
 }
@@ -146,10 +173,23 @@ function PriceAxis({ y }: { y: ReturnType<typeof priceScale> }) {
   );
 }
 
-export function PriceOverTimeChart({ prices }: { prices: PriceOverTime }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-  const { distribution: d, kind } = prices;
-  const days = prices.deliveryDates;
+interface OverTimeProps {
+  prices: PriceOverTime;
+  zoom: Zoom;
+  onZoom: (zoom: Zoom) => void;
+}
+
+export function PriceOverTimeChart({ prices, zoom, onZoom }: OverTimeProps) {
+  const { kind } = prices;
+  // The zoomed days, and the distribution cut to them.
+  const [start, end] = zoomRange(prices.deliveryDates, zoom);
+  const days = prices.deliveryDates.slice(start, end + 1);
+  const d = Object.fromEntries(
+    Object.entries(prices.distribution).map(([stat, values]) => [
+      stat,
+      values.slice(start, end + 1),
+    ]),
+  ) as Record<PriceStatistic, (number | null)[]>;
   const last = Math.max(days.length - 1, 1);
   const indices = days.map((_, i) => i);
 
@@ -168,13 +208,14 @@ export function PriceOverTimeChart({ prices }: { prices: PriceOverTime }) {
       ? "Each delivery day's observed price"
       : `The observed price over the trailing ${prices.days} days`;
 
-  function track(event: MouseEvent<SVGSVGElement>): void {
+  function indexAt(event: MouseEvent<SVGSVGElement>): number | null {
     const box = event.currentTarget.getBoundingClientRect();
-    if (box.width === 0) return;
+    if (box.width === 0) return null;
     const position = ((event.clientX - box.left) / box.width) * WIDTH;
     const index = Math.round(x.invert(position));
-    setHovered(Math.max(0, Math.min(last, index)));
+    return Math.max(0, Math.min(days.length - 1, index));
   }
+  const { hovered, anchor, handlers } = useDragZoom(days, indexAt, onZoom);
 
   const mean = hovered === null ? null : (d.mean[hovered] ?? null);
 
@@ -187,30 +228,17 @@ export function PriceOverTimeChart({ prices }: { prices: PriceOverTime }) {
           aria-label={`${described}, its mean with the 25–75% and 10–90% ranges, in EUR/MWh, on every delivery day from ${
             days[0] ?? ""
           } to ${days.at(-1) ?? ""}.`}
-          onMouseMove={track}
-          onMouseLeave={() => setHovered(null)}
+          className="zoomable"
+          {...handlers}
         >
           <PriceAxis y={y} />
-          {yearStarts(days).map(({ index, year }) => (
-            <Group key={year}>
-              <line
-                x1={x(index)}
-                x2={x(index)}
-                y1={MARGIN.top}
-                y2={BOTTOM + 4}
-                stroke="var(--grid)"
-              />
-              <text x={x(index) + 4} y={BOTTOM + 18} {...TICK_LABEL}>
-                {year}
-              </text>
-            </Group>
-          ))}
-          <line
-            x1={MARGIN.left}
-            x2={WIDTH - MARGIN.right}
-            y1={BOTTOM}
-            y2={BOTTOM}
-            stroke="var(--axis)"
+          <TimeAxis
+            days={days}
+            x={x}
+            top={MARGIN.top}
+            bottom={BOTTOM}
+            left={MARGIN.left}
+            right={WIDTH - MARGIN.right}
           />
           <Area
             data={indices}
@@ -234,10 +262,19 @@ export function PriceOverTimeChart({ prices }: { prices: PriceOverTime }) {
             x={(i) => x(i)}
             y={at(d.mean)}
             stroke="var(--series-observed)"
-            strokeWidth={kind === "daily" ? 1 : 1.5}
+            strokeWidth={kind === "daily" && days.length > 400 ? 1 : 1.5}
             strokeLinejoin="round"
             fill="none"
           />
+          {anchor !== null && hovered !== null && (
+            <Selection
+              from={anchor}
+              to={hovered}
+              x={x}
+              top={MARGIN.top}
+              bottom={BOTTOM}
+            />
+          )}
           {hovered !== null && (
             <g pointerEvents="none">
               <line
@@ -309,7 +346,13 @@ const BUCKETS: Record<PriceProfile["by"], Buckets> = {
 /** The widest box: narrow enough that the first one clears the y labels. */
 const MAX_BOX = 18;
 
-export function PriceProfileChart({ prices }: { prices: PriceProfile }) {
+interface ProfileProps {
+  prices: PriceProfile;
+  /** Whether the minimum and maximum are drawn beyond the whiskers. */
+  extremes: boolean;
+}
+
+export function PriceProfileChart({ prices, extremes }: ProfileProps) {
   const [hovered, setHovered] = useState<number | null>(null);
   const { distribution: d } = prices;
   const buckets = BUCKETS[prices.by];
@@ -321,7 +364,7 @@ export function PriceProfileChart({ prices }: { prices: PriceProfile }) {
     domain: [0, last],
     range: [MARGIN.left, WIDTH - MARGIN.right],
   });
-  const y = priceScale(d);
+  const y = priceScale(d, extremes);
   const columnWidth = (WIDTH - MARGIN.left - MARGIN.right) / last;
   const half = Math.min(columnWidth * 0.55, MAX_BOX) / 2;
   const axis = (tickValues: number[], fontSize: number) => (
@@ -345,7 +388,9 @@ export function PriceProfileChart({ prices }: { prices: PriceProfile }) {
           role="img"
           aria-label={`The observed price over the ${SCOPE_LABELS[
             prices.history
-          ].toLowerCase()}, ${buckets.described}: its median, mean, 25–75% and 10–90% ranges, in EUR/MWh.`}
+          ].toLowerCase()}, ${buckets.described}: its median, mean, 25–75% and 10–90% ranges${
+            extremes ? ", minimum and maximum" : ""
+          }, in EUR/MWh.`}
           onMouseLeave={() => setHovered(null)}
         >
           <PriceAxis y={y} />
@@ -373,8 +418,32 @@ export function PriceProfileChart({ prices }: { prices: PriceProfile }) {
             )
               return null;
             const cx = x(i);
+            const low = d.min[i] ?? null;
+            const high = d.max[i] ?? null;
             return (
               <Group key={i}>
+                {extremes && low !== null && high !== null && (
+                  <g className="extremes">
+                    <line
+                      x1={cx}
+                      x2={cx}
+                      y1={y(low)}
+                      y2={y(high)}
+                      stroke="var(--muted)"
+                      strokeDasharray="2 3"
+                    />
+                    {[low, high].map((v, end) => (
+                      <line
+                        key={end}
+                        x1={cx - half / 2}
+                        x2={cx + half / 2}
+                        y1={y(v)}
+                        y2={y(v)}
+                        stroke="var(--muted)"
+                      />
+                    ))}
+                  </g>
+                )}
                 <line
                   x1={cx}
                   x2={cx}

@@ -298,8 +298,15 @@ _Avoid_: main chart, primary graph
 price's **price distribution** over the cut the hero chart's metric takes. Its
 tabs and history switch are the hero chart's, drawn a second time on the same
 state, so either chart's controls move both. It folds, and it is folded on the
-Day view, whose chart is that day's price. See ADR-0019.
+Day view, whose chart is that day's price. Its **min–max switch** draws the
+extremes on the box plots. See ADR-0019.
 _Avoid_: price graph, second chart
+
+**Zoom** — the span of scored delivery days both Over time charts draw, the
+whole record unless narrowed. Dragging across either chart sets it for both;
+the zoom bar's date inputs are its accessible form (ADR-0009, ADR-0019). It
+changes what is drawn, never a published figure.
+_Avoid_: brush, range picker, time filter
 
 **Day view** — the hero chart showing the **observed price** against all three
 models over the 24 period ordinals of one delivery day, priced in EUR/MWh.

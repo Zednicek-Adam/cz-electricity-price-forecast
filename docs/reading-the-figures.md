@@ -145,9 +145,16 @@ day's own 24 over the whole record, or the 30 or 7 days ending on each day
 otherwise. In **By weekday** and **By hour** each box holds the middle 50% of
 the prices in that bucket, with a line at the median, whiskers to the 10th
 and 90th percentiles and a dot at the mean. The lowest and highest prices are
-in the tooltip only, because one 2022 spike would flatten the rest. The chart
-is folded on the Day view, whose chart is already the day's price, and the
-Hide button folds it anywhere else.
+in the tooltip, and on the plot only with the **Min – max** switch on, as a
+dashed whisker beyond each box. It is off by default because one 2022 spike
+would flatten the rest. The chart is folded on the Day view, whose chart is
+already the day's price, and the Hide button folds it anywhere else.
+
+**Zooming.** In Over time, drag across either chart to zoom both to the days
+you covered; double-click, or Reset zoom, to see the whole record again. The
+dates under each chart set the same zoom from the keyboard. The y axis fits
+the days shown. The headline numbers do not change: they are the whole
+record's, or the last 30 or 7 days'.
 
 Per-day rMAE is noisy. On a calm day the naïve's error can be close to zero, so
 the ratio for that day can be very large or very small without meaning much.

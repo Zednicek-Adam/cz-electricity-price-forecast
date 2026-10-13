@@ -5,7 +5,8 @@
  * - **Price chart** — the observed price's distribution over the cut the hero
  *   chart shows. Its tabs and history switch are the hero chart's own, drawn a
  *   second time, so the two charts always show the same cut. It folds away,
- *   and it is folded on the Day view, whose chart is the day's price.
+ *   and it is folded on the Day view, whose chart is the day's price. Its Over
+ *   time shares the hero chart's zoom: a span of days both draw.
  *
  * - **Day** — one delivery day's prices. Its metric selector sits in the
  *   day's accuracy panel beneath the chart, because there it rescores the
@@ -63,6 +64,7 @@ import { ProfileChart } from "./ProfileChart.tsx";
 import { isStale, todayInPrague } from "./record.ts";
 import { Ribbon } from "./Ribbon.tsx";
 import { Segmented } from "./Segmented.tsx";
+import { ZoomBar, type Zoom } from "./Zoom.tsx";
 import type {
   Dashboard,
   DeliveryDate,
@@ -103,6 +105,8 @@ export function App({ data }: { data: Dashboard }) {
   // Whether the price chart is unfolded on the views it draws; the Day view
   // folds it regardless (ADR-0019).
   const [pricesOpen, setPricesOpen] = useState(true);
+  // The span of days both Over time charts draw; null draws them all.
+  const [zoom, setZoom] = useState<Zoom>(null);
 
   function openDay(day: DeliveryDate): void {
     setDeliveryDate(day);
@@ -151,6 +155,8 @@ export function App({ data }: { data: Dashboard }) {
             onHistory={setHistory}
             open={pricesOpen}
             onOpen={setPricesOpen}
+            zoom={zoom}
+            onZoom={setZoom}
           />
         </section>
         <section className="card hero" aria-label="Hero chart">
@@ -181,6 +187,8 @@ export function App({ data }: { data: Dashboard }) {
                 onScope={setHistory}
                 metric={chartMetric}
                 onMetric={setChartMetric}
+                zoom={zoom}
+                onZoom={setZoom}
               />
             ) : (
               <ProfileView
@@ -382,8 +390,10 @@ function ChartSwitches({ scope, onScope, metric, onMetric }: ChartViewProps) {
 
 /** Over time: over the whole record the running metric, over the last 30 or
  * 7 days the trailing one, across the whole record. */
-function TrendView(props: ChartViewProps) {
-  const { data, scope, metric } = props;
+function TrendView(
+  props: ChartViewProps & { zoom: Zoom; onZoom: (zoom: Zoom) => void },
+) {
+  const { data, scope, metric, zoom, onZoom } = props;
   const running = scope === "whole";
   const series = metricOverTime(data, scope, metric);
   const { label } = METRIC_PRESENTATION[metric];
@@ -411,7 +421,8 @@ function TrendView(props: ChartViewProps) {
       </p>
       <HeadlineNumbers metric={metric} figures={figures} />
       <Legend series={series.series.map((s) => s.model)} />
-      <OverTimeChart series={series} />
+      <OverTimeChart series={series} zoom={zoom} onZoom={onZoom} />
+      <ZoomBar days={series.deliveryDates} zoom={zoom} onZoom={onZoom} />
     </>
   );
 }
@@ -448,6 +459,8 @@ interface PriceCardProps {
   onHistory: (history: History) => void;
   open: boolean;
   onOpen: (open: boolean) => void;
+  zoom: Zoom;
+  onZoom: (zoom: Zoom) => void;
 }
 
 /** The price chart: a bar with the hero chart's tabs and a fold button, and
@@ -456,6 +469,8 @@ interface PriceCardProps {
 function PriceCard(props: PriceCardProps) {
   const { data, view, onView, history, onHistory, open, onOpen } = props;
   const folded = view === "day" || !open;
+  // Whether the box plots draw the minimum and maximum; kept while folded.
+  const [extremes, setExtremes] = useState(false);
 
   return (
     <>
@@ -494,6 +509,10 @@ function PriceCard(props: PriceCardProps) {
             view={view}
             history={history}
             onHistory={onHistory}
+            extremes={extremes}
+            onExtremes={setExtremes}
+            zoom={props.zoom}
+            onZoom={props.onZoom}
           />
         )}
       </div>
@@ -508,11 +527,19 @@ function PriceView({
   view,
   history,
   onHistory,
+  extremes,
+  onExtremes,
+  zoom,
+  onZoom,
 }: {
   data: Dashboard;
   view: Exclude<View, "day">;
   history: History;
   onHistory: (history: History) => void;
+  extremes: boolean;
+  onExtremes: (extremes: boolean) => void;
+  zoom: Zoom;
+  onZoom: (zoom: Zoom) => void;
 }) {
   const title =
     view !== "overTime"
@@ -530,19 +557,43 @@ function PriceView({
           </p>
           <h3 className="panel-title">{title}</h3>
         </div>
-        <Segmented
-          label="Price chart history"
-          options={HISTORIES}
-          value={history}
-          onChange={onHistory}
-          name={(s) => SCOPE_LABELS[s]}
-        />
+        <div className="chart-switches">
+          {view !== "overTime" && (
+            <button
+              type="button"
+              role="switch"
+              className="toggle"
+              aria-checked={extremes}
+              onClick={() => onExtremes(!extremes)}
+            >
+              <span className="toggle-track" aria-hidden="true" />
+              Min – max
+            </button>
+          )}
+          <Segmented
+            label="Price chart history"
+            options={HISTORIES}
+            value={history}
+            onChange={onHistory}
+            name={(s) => SCOPE_LABELS[s]}
+          />
+        </div>
       </div>
-      <PriceKey box={view !== "overTime"} />
+      <PriceKey box={view !== "overTime"} extremes={extremes} />
       {view === "overTime" ? (
-        <PriceOverTimeChart prices={priceOverTime(data, history)} />
+        <>
+          <PriceOverTimeChart
+            prices={priceOverTime(data, history)}
+            zoom={zoom}
+            onZoom={onZoom}
+          />
+          <ZoomBar days={data.running.dates} zoom={zoom} onZoom={onZoom} />
+        </>
       ) : (
-        <PriceProfileChart prices={priceProfile(data, view, history)} />
+        <PriceProfileChart
+          prices={priceProfile(data, view, history)}
+          extremes={extremes}
+        />
       )}
     </>
   );

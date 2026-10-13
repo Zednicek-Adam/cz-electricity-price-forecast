@@ -8,8 +8,11 @@
 import type { ModelSlug } from "./types.ts";
 import type { ReactNode } from "react";
 
+import { Group } from "@visx/group";
+
 import { LineKey } from "./Legend.tsx";
 import { SERIES_COLOURS } from "./presentation.ts";
+import { timeTicks } from "./record.ts";
 
 type SeriesKey = ModelSlug | "observed";
 
@@ -42,6 +45,40 @@ export function YGrid({ ticks, y, left, right }: GridProps) {
         />
       ))}
     </g>
+  );
+}
+
+interface TimeAxisProps {
+  /** The delivery days drawn, one per index. */
+  days: string[];
+  x: (index: number) => number;
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/** The x axis over a run of delivery days: a gridline at each tick, labelled
+ * just right of it, as fine as the span drawn allows. */
+export function TimeAxis({ days, x, top, bottom, left, right }: TimeAxisProps) {
+  return (
+    <>
+      {timeTicks(days).map(({ index, label }) => (
+        <Group key={index}>
+          <line
+            x1={x(index)}
+            x2={x(index)}
+            y1={top}
+            y2={bottom + 4}
+            stroke="var(--grid)"
+          />
+          <text x={x(index) + 4} y={bottom + 18} {...TICK_LABEL}>
+            {label}
+          </text>
+        </Group>
+      ))}
+      <line x1={left} x2={right} y1={bottom} y2={bottom} stroke="var(--axis)" />
+    </>
   );
 }
 
