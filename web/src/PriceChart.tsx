@@ -26,7 +26,7 @@ import { AxisBottom, AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { Area, LinePath } from "@visx/shape";
-import { useState, type MouseEvent } from "react";
+import { useState } from "react";
 
 import {
   TICK_LABEL,
@@ -208,11 +208,8 @@ export function PriceOverTimeChart({ prices, zoom, onZoom }: OverTimeProps) {
       ? "Each delivery day's observed price"
       : `The observed price over the trailing ${prices.days} days`;
 
-  function indexAt(event: MouseEvent<SVGSVGElement>): number | null {
-    const box = event.currentTarget.getBoundingClientRect();
-    if (box.width === 0) return null;
-    const position = ((event.clientX - box.left) / box.width) * WIDTH;
-    const index = Math.round(x.invert(position));
+  function indexAt(fraction: number): number {
+    const index = Math.round(x.invert(fraction * WIDTH));
     return Math.max(0, Math.min(days.length - 1, index));
   }
   const { hovered, anchor, handlers } = useDragZoom(days, indexAt, onZoom);

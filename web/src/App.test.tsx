@@ -205,6 +205,26 @@ describe("the day navigator", () => {
     expect(headline("Chronos-2")).toBe("20.0 EUR/MWh");
   });
 
+  test("the date can be typed, through the dates outside the record on the way", async () => {
+    await openDay();
+    const input = screen.getByLabelText<HTMLInputElement>("Delivery day", {
+      selector: "input",
+    });
+
+    // Typing the year 2024 passes through 0002 first.
+    fireEvent.change(input, { target: { value: "0002-12-30" } });
+    expect(input.value).toBe("0002-12-30");
+    await dayTitle(OPENING_DAY);
+
+    fireEvent.change(input, { target: { value: "2024-12-30" } });
+    await dayTitle("2024-12-30");
+
+    // A date left outside the record gives way to the day shown.
+    fireEvent.change(input, { target: { value: "0002-12-30" } });
+    fireEvent.blur(input);
+    expect(input.value).toBe("2024-12-30");
+  });
+
   test("worst day lands on the fixture's worst day for the selected metric", async () => {
     await openDay();
 
@@ -686,7 +706,7 @@ describe("the zoom", () => {
     tab("Over time");
     expect(span(overTime())).toEqual(["2023-12-30", "2024-01-03"]);
 
-    const [from] = screen.getAllByLabelText("Zoom from");
+    const [from] = screen.getAllByLabelText<HTMLInputElement>("Zoom from");
     fireEvent.change(from as HTMLElement, { target: { value: "2024-01-01" } });
 
     expect(span(overTime())).toEqual(["2024-01-01", "2024-01-03"]);
@@ -715,6 +735,46 @@ describe("the zoom", () => {
     fireEvent.doubleClick(overTime());
 
     expect(span(priceChart())).toEqual(["2023-12-30", "2024-01-03"]);
+  });
+
+  test("after a zoom, the crosshair reads the day now under the pointer", async () => {
+    layOut();
+    await openDay();
+    tab("Over time");
+    const chart = overTime();
+    const readout = () =>
+      heroChart().querySelector(".tooltip-title")?.textContent;
+
+    fireEvent.mouseDown(chart, { clientX: 252, button: 0 });
+    fireEvent.mouseMove(chart, { clientX: 700 });
+    fireEvent.mouseUp(chart, { clientX: 700 });
+
+    // Three days now: day i sits at x = 48 + 408i, so 700 is nearest day 2.
+    expect(readout()).toBe("Through 2024-01-02");
+
+    fireEvent.doubleClick(overTime());
+
+    // Five days again: 700 is nearest day 3.
+    expect(readout()).toBe("Through 2024-01-02");
+    fireEvent.mouseMove(overTime(), { clientX: 252 });
+    expect(readout()).toBe("Through 2023-12-31");
+  });
+
+  test("a zoom date can be typed, through the dates it cannot take", async () => {
+    await openDay();
+    tab("Over time");
+    const [from] = screen.getAllByLabelText<HTMLInputElement>("Zoom from");
+
+    fireEvent.change(from as HTMLInputElement, {
+      target: { value: "0002-01-01" },
+    });
+    expect(from?.value).toBe("0002-01-01");
+    expect(span(overTime())).toEqual(["2023-12-30", "2024-01-03"]);
+
+    fireEvent.change(from as HTMLInputElement, {
+      target: { value: "2024-01-01" },
+    });
+    expect(span(overTime())).toEqual(["2024-01-01", "2024-01-03"]);
   });
 
   test("a click is not a zoom", async () => {

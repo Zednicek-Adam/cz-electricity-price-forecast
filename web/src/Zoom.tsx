@@ -10,6 +10,7 @@
  */
 import { useState, type MouseEvent } from "react";
 
+import { DateInput } from "./DateInput.tsx";
 import type { DeliveryDate } from "./types.ts";
 
 /** The first and last delivery day drawn; null draws every day. */
@@ -29,32 +30,43 @@ export function zoomRange(days: DeliveryDate[], zoom: Zoom): [number, number] {
 }
 
 /**
- * A chart's hover and drag over its drawn days. `indexAt` turns a pointer
- * event into the index of the day under it, or null. Returns the hovered
- * index, the drag's anchor while one is in progress, and the svg's handlers.
+ * A chart's hover and drag over its drawn days. `indexAt` turns a position
+ * across the svg, as a fraction of its width, into the index of the day
+ * there. The pointer is kept as that position, not as a day, so when a zoom
+ * redraws the chart under a still pointer the crosshair moves to the day now
+ * under it. Returns the hovered index, the drag's anchor while one is in
+ * progress, and the svg's handlers.
  */
 export function useDragZoom(
   days: DeliveryDate[],
-  indexAt: (event: MouseEvent<SVGSVGElement>) => number | null,
+  indexAt: (fraction: number) => number,
   onZoom: (zoom: Zoom) => void,
 ) {
-  const [hovered, setHovered] = useState<number | null>(null);
+  const [pointer, setPointer] = useState<number | null>(null);
   const [anchor, setAnchor] = useState<number | null>(null);
+  const hovered = pointer === null ? null : indexAt(pointer);
+
+  function at(event: MouseEvent<SVGSVGElement>): number | null {
+    const box = event.currentTarget.getBoundingClientRect();
+    if (box.width === 0) return null;
+    return (event.clientX - box.left) / box.width;
+  }
 
   const handlers = {
     onMouseMove: (event: MouseEvent<SVGSVGElement>) => {
-      setHovered(indexAt(event));
+      setPointer(at(event));
     },
     onMouseDown: (event: MouseEvent<SVGSVGElement>) => {
       if (event.button !== 0) return;
-      const index = indexAt(event);
-      if (index === null) return;
+      const fraction = at(event);
+      if (fraction === null) return;
       event.preventDefault();
-      setAnchor(index);
+      setAnchor(indexAt(fraction));
     },
     onMouseUp: (event: MouseEvent<SVGSVGElement>) => {
-      const index = indexAt(event);
-      if (anchor !== null && index !== null) {
+      const fraction = at(event);
+      if (anchor !== null && fraction !== null) {
+        const index = indexAt(fraction);
         const [a, b] = anchor < index ? [anchor, index] : [index, anchor];
         const from = days[a];
         const to = days[b];
@@ -63,7 +75,7 @@ export function useDragZoom(
       setAnchor(null);
     },
     onMouseLeave: () => {
-      setHovered(null);
+      setPointer(null);
       setAnchor(null);
     },
     onDoubleClick: () => onZoom(null),
@@ -121,22 +133,20 @@ export function ZoomBar({ days, zoom, onZoom }: BarProps) {
         Drag across a chart to zoom · double-click to reset
       </p>
       <div className="zoom" role="group" aria-label="Zoom">
-        <input
-          type="date"
-          aria-label="Zoom from"
+        <DateInput
+          label="Zoom from"
           value={from}
           min={first}
           max={to}
-          onChange={(event) => pick({ from: event.target.value, to })}
+          onChange={(value) => pick({ from: value, to })}
         />
         <span aria-hidden="true">–</span>
-        <input
-          type="date"
-          aria-label="Zoom to"
+        <DateInput
+          label="Zoom to"
           value={to}
           min={from}
           max={last}
-          onChange={(event) => pick({ from, to: event.target.value })}
+          onChange={(value) => pick({ from, to: value })}
         />
         <button type="button" disabled={!zoom} onClick={() => onZoom(null)}>
           Reset zoom

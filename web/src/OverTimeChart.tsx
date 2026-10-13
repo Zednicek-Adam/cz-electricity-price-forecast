@@ -24,7 +24,6 @@ import { AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { LinePath } from "@visx/shape";
-import type { MouseEvent } from "react";
 
 import {
   EndMarker,
@@ -101,11 +100,8 @@ export function OverTimeChart({ series: whole, zoom, onZoom }: Props) {
       ? `Running ${metricLabel}`
       : `${metricLabel} over the trailing ${series.days} days`;
 
-  function indexAt(event: MouseEvent<SVGSVGElement>): number | null {
-    const box = event.currentTarget.getBoundingClientRect();
-    if (box.width === 0) return null;
-    const position = ((event.clientX - box.left) / box.width) * WIDTH;
-    const index = Math.round(x.invert(position));
+  function indexAt(fraction: number): number {
+    const index = Math.round(x.invert(fraction * WIDTH));
     return Math.max(0, Math.min(days.length - 1, index));
   }
   const { hovered, anchor, handlers } = useDragZoom(days, indexAt, onZoom);
