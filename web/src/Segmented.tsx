@@ -1,7 +1,8 @@
 /**
  * A segmented switch: a labelled group of native toggle buttons, exactly one
  * pressed. Every choice on the page that picks one of a few — the metric, the
- * scoreboard's scope, the Diebold–Mariano model — is one of these, so they all
+ * chart's history, the scoreboard's scope, the Diebold–Mariano model — is one
+ * of these, so they all
  * look and behave alike.
  */
 interface Props<T extends string> {

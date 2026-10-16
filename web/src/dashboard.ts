@@ -10,10 +10,15 @@ import type {
   DeliveryDate,
   DeliveryDay,
   Figures,
+  History,
   Metric,
   ModelMetrics,
   MetricOverTime,
+  MetricProfile,
   ModelSlug,
+  PriceOverTime,
+  PriceProfile,
+  Profile,
   Scope,
 } from "./types.ts";
 
@@ -64,15 +69,18 @@ export function dailyMetric(data: Dashboard, metric: Metric): DailyMetric {
   return { model: HEADLINE_MODEL, metric, deliveryDates, values };
 }
 
-/** The Over time view's running metric, or the 30-day view's trailing one. */
+/** The Over time view's running metric, over the whole record, or its
+ * trailing one, over the last 30 or 7 days. */
 export function metricOverTime(
   data: Dashboard,
-  kind: MetricOverTime["kind"],
+  history: History,
   metric: Metric,
 ): MetricOverTime {
-  const source = kind === "running" ? data.running : data.trailing;
+  const running = history === "whole";
+  const source = running ? data.running : data.trailing[history];
   return {
-    kind,
+    kind: running ? "running" : "trailing",
+    days: running ? null : data[history].days,
     metric,
     deliveryDates: data.running.dates,
     series: data.models.flatMap((model) => {
@@ -82,7 +90,49 @@ export function metricOverTime(
   };
 }
 
-export function accuracy(data: Dashboard, scope: Scope): ModelMetrics[] {
+/** The By weekday or By hour view's figures, over the scope's days. */
+export function metricProfile(
+  data: Dashboard,
+  by: Profile,
+  scope: History,
+  metric: Metric,
+): MetricProfile {
+  return {
+    by,
+    scope,
+    metric,
+    series: data.models.flatMap((model) => {
+      const values = data.profiles[scope][by][metric][model];
+      return values ? [{ model, values }] : [];
+    }),
+  };
+}
+
+/** The price chart's Over time view: each scored day's own prices over the
+ * whole record, or the trailing 30 or 7 days' (ADR-0019). */
+export function priceOverTime(
+  data: Dashboard,
+  history: History,
+): PriceOverTime {
+  const daily = history === "whole";
+  return {
+    kind: daily ? "daily" : "trailing",
+    days: daily ? null : data[history].days,
+    deliveryDates: data.running.dates,
+    distribution: daily ? data.prices.daily : data.prices.trailing[history],
+  };
+}
+
+/** The price chart's By weekday or By hour view, over the history's days. */
+export function priceProfile(
+  data: Dashboard,
+  by: Profile,
+  history: History,
+): PriceProfile {
+  return { by, history, distribution: data.prices.profiles[history][by] };
+}
+
+export function accuracy(data: Dashboard, scope: History): ModelMetrics[] {
   return rows(data.models, data.accuracy[scope]);
 }
 

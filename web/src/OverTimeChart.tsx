@@ -1,12 +1,18 @@
 /**
- * The hero chart's two metric views, across every scored delivery day:
+ * The hero chart's Over time view, across every scored delivery day, in either
+ * position of its history switch (ADR-0018):
  *
- * - **Over time** — the running metric (ADR-0007). Each point is the metric
+ * - **Whole record** — the running metric (ADR-0007). Each point is the metric
  *   over every delivery period from 2020-01-01 up to that day, so the line is
  *   a whole-record figure settling, not a day being scored.
- * - **30 days** — the trailing metric (ADR-0017). Each point is the metric
- *   over the 30 delivery days ending on that day, so the line moves with how
- *   the models are doing now, and the first 29 days have no point.
+ * - **Last 30 days** and **Last 7 days** — the trailing metric (ADR-0017,
+ *   ADR-0018). Each point is the metric over the 30 or 7 delivery days ending
+ *   on that day, so the line moves with how the models are doing now, and the
+ *   first 29 or 6 days have no point.
+ *
+ * Both draw the zoom the price chart shares (ADR-0019): a drag across the
+ * chart zooms both to the days it covered, and the y axis fits the days
+ * drawn.
  *
  * There is no observed line: on a metric axis the observed price is the zero
  * the metric is measured from. Every point is drawn, as SVG, with no
@@ -18,9 +24,15 @@ import { AxisLeft } from "@visx/axis";
 import { Group } from "@visx/group";
 import { scaleLinear } from "@visx/scale";
 import { LinePath } from "@visx/shape";
-import { useState, type MouseEvent } from "react";
+import type { MouseEvent } from "react";
 
-import { EndMarker, TICK_LABEL, Tooltip, YGrid } from "./ChartParts.tsx";
+import {
+  EndMarker,
+  TICK_LABEL,
+  TimeAxis,
+  Tooltip,
+  YGrid,
+} from "./ChartParts.tsx";
 import { formatTick, paddedDomain, spreadLabels } from "./charts.ts";
 import {
   formatMetric,
@@ -29,7 +41,7 @@ import {
   SERIES_COLOURS,
   SERIES_DASH,
 } from "./presentation.ts";
-import { yearStarts } from "./record.ts";
+import { Selection, useDragZoom, zoomRange, type Zoom } from "./Zoom.tsx";
 
 const WIDTH = 960;
 const HEIGHT = 340;
@@ -40,19 +52,36 @@ const MARGIN = { top: 26, right: 96, bottom: 30, left: 48 };
  * guard. */
 const SCALE_FROM_DAY = { running: 30, trailing: 0 };
 
-export function OverTimeChart({ series }: { series: MetricOverTime }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-  const { kind, metric } = series;
-  const days = series.deliveryDates;
+interface Props {
+  series: MetricOverTime;
+  zoom: Zoom;
+  onZoom: (zoom: Zoom) => void;
+}
+
+export function OverTimeChart({ series: whole, zoom, onZoom }: Props) {
+  const { kind, metric } = whole;
+  // The zoomed days, and every series cut to them.
+  const [start, end] = zoomRange(whole.deliveryDates, zoom);
+  const days = whole.deliveryDates.slice(start, end + 1);
+  const series = {
+    ...whole,
+    series: whole.series.map((s) => ({
+      ...s,
+      values: s.values.slice(start, end + 1),
+    })),
+  };
   const last = Math.max(days.length - 1, 1);
 
   const x = scaleLinear({
     domain: [0, last],
     range: [MARGIN.left, WIDTH - MARGIN.right],
   });
-  const scaled = series.series.flatMap((s) =>
-    s.values.slice(SCALE_FROM_DAY[kind]).filter((v): v is number => v !== null),
-  );
+  const values = (from: number) =>
+    series.series.flatMap((s) =>
+      s.values.slice(from).filter((v): v is number => v !== null),
+    );
+  const skipped = values(Math.max(0, SCALE_FROM_DAY[kind] - start));
+  const scaled = skipped.length ? skipped : values(0);
   const y = scaleLinear({
     domain: paddedDomain(scaled.length ? scaled : [0, 1], 0.12),
     range: [HEIGHT - MARGIN.bottom, MARGIN.top],
@@ -70,15 +99,16 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
   const described =
     kind === "running"
       ? `Running ${metricLabel}`
-      : `${metricLabel} over the trailing 30 days`;
+      : `${metricLabel} over the trailing ${series.days} days`;
 
-  function track(event: MouseEvent<SVGSVGElement>): void {
+  function indexAt(event: MouseEvent<SVGSVGElement>): number | null {
     const box = event.currentTarget.getBoundingClientRect();
-    if (box.width === 0) return;
+    if (box.width === 0) return null;
     const position = ((event.clientX - box.left) / box.width) * WIDTH;
     const index = Math.round(x.invert(position));
-    setHovered(Math.max(0, Math.min(last, index)));
+    return Math.max(0, Math.min(days.length - 1, index));
   }
+  const { hovered, anchor, handlers } = useDragZoom(days, indexAt, onZoom);
 
   return (
     <div className="chart-frame">
@@ -91,8 +121,8 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
             .join(", ")}, over every delivery day from ${days[0] ?? ""} to ${
             days.at(-1) ?? ""
           }.`}
-          onMouseMove={track}
-          onMouseLeave={() => setHovered(null)}
+          className="zoomable"
+          {...handlers}
         >
           <text x={4} y={12} {...TICK_LABEL}>
             {unit ? `${metricLabel} · ${unit}` : metricLabel}
@@ -103,26 +133,13 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
             left={MARGIN.left}
             right={WIDTH - MARGIN.right}
           />
-          {yearStarts(days).map(({ index, year }) => (
-            <Group key={year}>
-              <line
-                x1={x(index)}
-                x2={x(index)}
-                y1={MARGIN.top}
-                y2={bottom + 4}
-                stroke="var(--grid)"
-              />
-              <text x={x(index) + 4} y={bottom + 18} {...TICK_LABEL}>
-                {year}
-              </text>
-            </Group>
-          ))}
-          <line
-            x1={MARGIN.left}
-            x2={WIDTH - MARGIN.right}
-            y1={bottom}
-            y2={bottom}
-            stroke="var(--axis)"
+          <TimeAxis
+            days={days}
+            x={x}
+            top={MARGIN.top}
+            bottom={bottom}
+            left={MARGIN.left}
+            right={WIDTH - MARGIN.right}
           />
           <AxisLeft
             scale={y}
@@ -160,6 +177,15 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
               </Group>
             );
           })}
+          {anchor !== null && hovered !== null && (
+            <Selection
+              from={anchor}
+              to={hovered}
+              x={x}
+              top={MARGIN.top}
+              bottom={bottom}
+            />
+          )}
           {hovered !== null && (
             <g pointerEvents="none">
               <line
@@ -193,7 +219,7 @@ export function OverTimeChart({ series }: { series: MetricOverTime }) {
             title={
               kind === "running"
                 ? `Through ${days[hovered]}`
-                : `30 days to ${days[hovered]}`
+                : `${series.days} days to ${days[hovered]}`
             }
             at={x(hovered) / WIDTH}
             rows={series.series.map((s) => ({

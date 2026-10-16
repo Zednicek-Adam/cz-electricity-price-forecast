@@ -1,5 +1,5 @@
-"""Published metrics, the running and trailing metrics and the Diebold-Mariano
-tests.
+"""Published metrics, the running and trailing metrics, the profiles and the
+Diebold-Mariano tests.
 
 Every number the dashboard shows is computed here, once per export, so every
 reader sees the same figure computed the same way and the browser never
@@ -41,6 +41,10 @@ METRICS = ("mae", "rmse", "smape", "rmae")
 # scoreboard's "last 30 days" scope are computed over (ADR-0017).
 WINDOW_DAYS = 30
 
+# The trailing scopes the history switch offers, in calendar delivery days
+# (ADR-0018): the window, and the last week.
+WINDOWS = {"window": WINDOW_DAYS, "week": 7}
+
 # A delivery period on the repaired grid, as the scored frame keys it.
 PERIOD = ["delivery_date", "period_ordinal"]
 
@@ -54,6 +58,13 @@ SCOPES = {
     "overall": lambda scored: pd.Series(
         scored["delivery_date"].min(), index=scored.index
     ),
+}
+
+# profile -> what each scored period is grouped by, and how many buckets there
+# are (ADR-0018). Every delivery day is on the repaired 24-period grid.
+PROFILES = {
+    "weekday": (lambda scored: scored["delivery_date"].dt.dayofweek, 7),
+    "period": (lambda scored: scored["period_ordinal"] - 1, 24),
 }
 
 
@@ -109,32 +120,73 @@ def published_metrics(scored: pd.DataFrame) -> list[MetricRow]:
     """
     if scored.empty:
         return []
+    rows: list[MetricRow] = []
+    for scope_type, scope_start in SCOPES.items():
+        pooled = _pooled(scored, scope_start(scored))
+        for (model, start), figures in pooled.iterrows():
+            n = int(figures["n"])
+            key = (model, scope_type, start.date())
+            rows += [
+                MetricRow(*key, metric, float(figures[metric]), n)
+                for metric in METRICS
+                if not math.isnan(figures[metric])
+            ]
+    return rows
+
+
+def profile(scored: pd.DataFrame, by: str) -> dict[str, dict[str, list[float | None]]]:
+    """Each model's four metrics over the scored periods in `scored`, in each
+    bucket of a profile (ADR-0018): per metric, per model, one figure per weekday from
+    Monday, or per period ordinal from 1.
+
+    A bucket pools its delivery periods exactly as a published metric's scope
+    does, and its rMAE is the ratio of the model's MAE to the naïve's in the
+    same bucket. `None` where a model has no scored period in a bucket, or the
+    ratio is undefined.
+    """
+    bucket, size = PROFILES[by]
+    figures: dict[str, dict[str, list[float | None]]] = {m: {} for m in METRICS}
+    if scored.empty:
+        return figures
+    pooled = _pooled(scored, bucket(scored))
+    for model, buckets in pooled.groupby(level="model"):
+        buckets = buckets.droplevel("model").reindex(range(size))
+        for metric in METRICS:
+            figures[metric][str(model)] = [
+                None if math.isnan(v) else float(v) for v in buckets[metric]
+            ]
+    return figures
+
+
+def _pooled(scored: pd.DataFrame, bucket: pd.Series) -> pd.DataFrame:
+    """Per model and bucket, the count of scored periods `n` and the four
+    metrics pooled over them; rMAE is NaN where the naïve's MAE in the bucket
+    is missing or zero."""
     frame = scored.assign(
+        bucket=bucket,
         abs_error=scored["error"].abs(),
         squared_error=scored["error"] ** 2,
         smape_ratio=_smape_ratio(scored["observed"], scored["forecast"]),
     )
-    rows: list[MetricRow] = []
-    for scope_type, scope_start in SCOPES.items():
-        frame["scope_start"] = scope_start(frame)
-        sums = frame.groupby(["model", "scope_start"]).agg(
-            n=("abs_error", "size"),
-            abs_sum=("abs_error", "sum"),
-            squared_sum=("squared_error", "sum"),
-            smape_sum=("smape_ratio", "sum"),
-        )
-        mae = sums["abs_sum"] / sums["n"]
-        for (model, start), scope in sums.iterrows():
-            n = int(scope["n"])
-            key = (model, scope_type, start.date())
-            rows.append(MetricRow(*key, "mae", mae[model, start], n))
-            rows.append(MetricRow(*key, "rmse", math.sqrt(scope["squared_sum"] / n), n))
-            rows.append(MetricRow(*key, "smape", 200 * scope["smape_sum"] / n, n))
-            naive_mae = mae.get((NAIVE, start), 0.0)
-            if naive_mae > 0:
-                ratio = mae[model, start] / naive_mae
-                rows.append(MetricRow(*key, "rmae", ratio, n))
-    return rows
+    sums = frame.groupby(["model", "bucket"]).agg(
+        n=("abs_error", "size"),
+        abs_sum=("abs_error", "sum"),
+        squared_sum=("squared_error", "sum"),
+        smape_sum=("smape_ratio", "sum"),
+    )
+    pooled = pd.DataFrame(
+        {
+            "n": sums["n"],
+            "mae": sums["abs_sum"] / sums["n"],
+            "rmse": np.sqrt(sums["squared_sum"] / sums["n"]),
+            "smape": 200 * sums["smape_sum"] / sums["n"],
+        }
+    )
+    models = pooled.index.get_level_values("model")
+    naive = pooled.loc[NAIVE, "mae"] if NAIVE in models else pd.Series(dtype="float64")
+    naive_mae = naive.reindex(pooled.index.get_level_values("bucket")).to_numpy()
+    pooled["rmae"] = (pooled["mae"] / naive_mae).where(naive_mae > 0)
+    return pooled
 
 
 def _smape_ratio(observed: pd.Series, forecast: pd.Series) -> pd.Series:

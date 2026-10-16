@@ -3,8 +3,9 @@
     uv run python -m forecast.export [--out ../web/public/dashboard.json]
 
 It reads `data/cz-day-ahead-prices.csv` and `data/forecasts.csv`, repairs the
-grid, computes every published metric, the running and trailing metrics and the
-Diebold-Mariano tests, and writes them into `dashboard.json`:
+grid, computes every published metric, the running and trailing metrics, the
+profiles, the Diebold-Mariano tests and the observed price's distributions, and
+writes them into `dashboard.json`:
 
     record       the first and last delivery day, and the pending day
     models       the models in the record, in the order the dashboard lists them
@@ -12,20 +13,29 @@ Diebold-Mariano tests, and writes them into `dashboard.json`:
                  each model's 24 forecasts and its four metrics for the day
     running      the scored delivery days, and per metric each model's running
                  figure on them
-    trailing     per metric, each model's figure over the 30 delivery days
-                 ending on each of those days (null until a whole window fits)
+    trailing     per window scope, `window` and `week`, per metric, each
+                 model's figure over the 30 or 7 delivery days ending on each
+                 of those days (null until a whole window fits)
     window       the last 30 delivery days that have been scored
-    accuracy     per scope, the `whole` record and the last 30 days (`window`),
-                 each model's four metrics
-    comparisons  per scope as for accuracy, per model and opponent, the
-                 Diebold-Mariano statistic by period ordinal (null where it
+    week         the last 7 delivery days that have been scored
+    profiles     per scope, the `whole` record, the last 30 days (`window`) and
+                 the last 7 (`week`), per profile, `weekday` and `period`, per
+                 metric, each model's figure on each weekday from Monday, or at
+                 each period ordinal
+    accuracy     per scope as for profiles, each model's four metrics
+    prices       the observed price's distribution (ADR-0019), per statistic:
+                 `daily` on each scored day, `trailing` per window scope over
+                 the window ending on each, and `profiles` per scope and
+                 profile in each bucket, the same cuts the metrics take
+    comparisons  per scope, `whole` and `window` only, per model and opponent,
+                 the Diebold-Mariano statistic by period ordinal (null where it
                  could not be computed)
 
-Its shape is `Dashboard` in `web/src/types.ts`. Forecasts are rounded to the
-cent and figures to six significant digits: finer than anything on screen, and
-every figure is computed before rounding. The file is rebuilt whole on every
-deploy, so the dashboard can never describe a forecast the record no longer
-holds (ADR-0010).
+Its shape is `Dashboard` in `web/src/types.ts`. Forecasts and the price
+distributions are rounded to the cent and figures to six significant digits:
+finer than anything on screen, and every figure is computed before rounding.
+The file is rebuilt whole on every deploy, so the dashboard can never describe
+a forecast the record no longer holds (ADR-0010).
 
 Before it writes, it checks the record and stops on the first failure:
 
@@ -41,21 +51,24 @@ import json
 import logging
 import sys
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from forecast import distribution
 from forecast.forecasts import FORECASTS, StoredRun, read_forecasts
 from forecast.loader import PRICES, REPO_ROOT, repaired_prices
 from forecast.metrics import (
     METRICS,
     NAIVE,
-    WINDOW_DAYS,
+    PROFILES,
+    WINDOWS,
     DayFigure,
     model_comparisons,
+    profile,
     published_metrics,
     running,
     scored_forecasts,
@@ -178,30 +191,41 @@ def export(
     }
 
     scored_days = sorted({f.delivery_date for fs in per_day.values() for f in fs})
-    running_figures: dict[str, Any] = {"dates": [d.isoformat() for d in scored_days]}
-    trailing_figures: dict[str, Any] = {}
-    for metric in METRICS:
-        source = "mae" if metric == "rmae" else metric
-        for series, into in ((running, running_figures), (trailing, trailing_figures)):
-            into[metric] = {
+
+    def series_of(series: Callable[..., list[float | None]], **kwargs: int) -> Any:
+        return {
+            metric: {
                 m: [
                     figure(v)
                     for v in series(
-                        metric, scored_days, per_day[m, source], per_day[NAIVE, "mae"]
+                        metric,
+                        scored_days,
+                        per_day[m, "mae" if metric == "rmae" else metric],
+                        per_day[NAIVE, "mae"],
+                        **kwargs,
                     )
                 ]
                 for m in models
             }
+            for metric in METRICS
+        }
 
-    # The window scope: the last WINDOW_DAYS calendar delivery days, up to and
+    # Each window scope: its last `days` calendar delivery days, up to and
     # including the last scored one.
     window_last = scored_days[-1]
-    window_first = window_last - timedelta(days=WINDOW_DAYS - 1)
-    recent = scored[scored["delivery_date"] >= pd.Timestamp(window_first)]
-    window_overall: dict[str, dict[str, float]] = defaultdict(dict)
-    for r in published_metrics(recent):
-        if r.scope_type == "overall":
-            window_overall[r.model][r.metric] = r.value
+    windows = {
+        scope: window_last - timedelta(days=days - 1) for scope, days in WINDOWS.items()
+    }
+    frames = {"whole": scored} | {
+        scope: scored[scored["delivery_date"] >= pd.Timestamp(start)]
+        for scope, start in windows.items()
+    }
+    scope_overall: dict[str, dict[str, dict[str, float]]] = {"whole": overall}
+    for scope in WINDOWS:
+        scope_overall[scope] = defaultdict(dict)
+        for r in published_metrics(frames[scope]):
+            if r.scope_type == "overall":
+                scope_overall[scope][r.model][r.metric] = r.value
 
     def comparisons_of(frame: pd.DataFrame) -> dict[str, dict[str, Any]]:
         found: dict[str, dict[str, list[float | None]]] = {m: {} for m in models}
@@ -209,6 +233,17 @@ def export(
             statistics = found[c.model_a].setdefault(c.model_b, [None] * 24)
             statistics[c.period_ordinal - 1] = figure(c.dm_statistic)
         return {m: {o: found[m][o] for o in by_display_order(found[m])} for m in models}
+
+    def profiles_of(frame: pd.DataFrame) -> dict[str, dict[str, Any]]:
+        return {
+            by: {
+                metric: {
+                    m: [figure(v) for v in by_model[m]] for m in models if m in by_model
+                }
+                for metric, by_model in profile(frame, by).items()
+            }
+            for by in PROFILES
+        }
 
     dashboard = {
         "record": {
@@ -218,22 +253,41 @@ def export(
         },
         "models": models,
         "days": days,
-        "running": running_figures,
-        "trailing": trailing_figures,
-        "window": {
-            "days": WINDOW_DAYS,
-            "first": window_first.isoformat(),
-            "last": window_last.isoformat(),
+        "running": {
+            "dates": [d.isoformat() for d in scored_days],
+            **series_of(running),
         },
+        "trailing": {
+            scope: series_of(trailing, days=days) for scope, days in WINDOWS.items()
+        },
+        **{
+            scope: {
+                "days": WINDOWS[scope],
+                "first": start.isoformat(),
+                "last": window_last.isoformat(),
+            }
+            for scope, start in windows.items()
+        },
+        "profiles": {scope: profiles_of(frame) for scope, frame in frames.items()},
         "accuracy": {
-            "whole": {m: metrics_of(overall[m]) for m in models},
-            "window": {
-                m: metrics_of(window_overall[m]) for m in models if m in window_overall
+            scope: {m: metrics_of(by_model[m]) for m in models if m in by_model}
+            for scope, by_model in scope_overall.items()
+        },
+        "prices": {
+            "daily": distribution.daily(observed, scored_days),
+            "trailing": {
+                scope: distribution.trailing(observed, scored_days, days)
+                for scope, days in WINDOWS.items()
+            },
+            "profiles": {
+                scope: {by: distribution.profile(frame, by) for by in PROFILES}
+                for scope, frame in frames.items()
             },
         },
+        # The Diebold-Mariano test needs more than a week of days per hour.
         "comparisons": {
             "whole": comparisons_of(scored),
-            "window": comparisons_of(recent),
+            "window": comparisons_of(frames["window"]),
         },
     }
     out.parent.mkdir(parents=True, exist_ok=True)

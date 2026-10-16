@@ -4,6 +4,10 @@ status: accepted
 
 # Three views, two metric switches, and a 30-day window
 
+> **Amended by [ADR-0018](0018-the-hero-chart-gains-a-weekday-and-an-hour-profile.md).**
+> The 30 days tab becomes a history switch shared by Over time and two new
+> views, By weekday and By hour, so the hero chart has four tabs.
+
 > **Amends [ADR-0006](0006-how-accuracy-is-presented.md) and
 > [ADR-0007](0007-the-dashboards-ten-second-story.md).** It reverses ADR-0006's
 > rejection of rolling windows and ADR-0007's single metric selector, and
