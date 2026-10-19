@@ -11,6 +11,10 @@ status: accepted
 > **Amended by [ADR-0017](0017-three-views-two-metric-switches-and-a-30-day-window.md).**
 > Rolling windows are no longer rejected: once the record became live, the
 > last 30 days are a real month of forecasts, and the dashboard shows them.
+>
+> **Amended by [ADR-0018](0018-the-hero-chart-gains-a-weekday-and-an-hour-profile.md).**
+> Per-hour accuracy arrives, as the hero chart's By hour view, beside a By
+> weekday view.
 
 The scoreboard leads with a **triple** — the headline model's MAE, the day-lag
 naïve's MAE, and the rMAE ratio between them — scoped to the whole replay,

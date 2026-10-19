@@ -20,6 +20,10 @@
   --series-chronos2-bright: #6da7ec;
   --series-ar168: #d4561f;
   --series-daylag: #138a5f;
+  /* The price chart's ranges: the observed price's ink, thinned. */
+  --price-outer: rgba(17, 17, 16, 0.07);
+  --price-inner: rgba(17, 17, 16, 0.16);
+  --price-box: #e4e2db;
   --warning: #b8541a;
   --radius: 14px;
   font-family:
@@ -190,6 +194,12 @@ a {
   margin-bottom: 14px;
 }
 
+.chart-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .card-bar {
   align-items: flex-start;
   margin-bottom: 12px;
@@ -210,12 +220,22 @@ a {
 
 /* ---------- Tabs: the hero chart's three views ---------- */
 
+/* Five tabs overflow a narrow screen, so the list scrolls sideways. Its
+   bottom rule is an inset shadow and the selected underline sits inside the
+   box, so nothing overflows vertically and no vertical scrollbar appears. */
 .tabs {
   display: flex;
   gap: 4px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 -1px 0 var(--border);
   background: var(--surface-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tabs [role="tab"] {
@@ -243,10 +263,127 @@ a {
   position: absolute;
   left: 8px;
   right: 8px;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px 2px 0 0;
   background: var(--ink);
+}
+
+/* The price chart's bar: its title, the hero chart's tabs again, and the
+   fold button. The bar carries the rule, so the tabs inside drop theirs. */
+.tabs-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 0 12px 0 20px;
+  box-shadow: inset 0 -1px 0 var(--border);
+  background: var(--surface-2);
+}
+
+.tabs-bar .tabs {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.tabs-title {
+  align-self: center;
+  font-size: 14px;
+  letter-spacing: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--border-strong);
+}
+
+.fold {
+  align-self: center;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.chevron {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(1px) rotate(-135deg);
+}
+
+/* Folded, the whole bar is one button: the title, what the chart would draw,
+   a preview of it, and a Show that looks like the Hide it replaces. */
+.fold-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.fold-bar:hover:not(:disabled) {
+  background: none;
+}
+
+.fold-bar:focus-visible {
+  outline-offset: -2px;
+}
+
+.fold-bar .tabs-title {
+  font-weight: 650;
+}
+
+.fold-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.sparkline {
+  flex: none;
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+
+.fold-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  transition: background 120ms;
+}
+
+.fold-bar:hover .sparkline {
+  opacity: 1;
+}
+
+.fold-bar:hover .fold-action {
+  background: var(--surface-2);
+  border-color: var(--ink-2);
+}
+
+.fold-action .chevron {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.panel-title {
+  font-size: 18px;
 }
 
 /* ---------- Buttons and switches ---------- */
@@ -378,6 +515,140 @@ button:disabled {
   flex: none;
   display: inline-block;
   vertical-align: middle;
+}
+
+/* The price chart's keys, each the shape of its mark. */
+.price-swatch {
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 16px;
+  height: 10px;
+}
+
+.price-line {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--series-observed);
+}
+
+.price-dot {
+  width: 7px;
+  height: 7px;
+  margin: 0 4.5px;
+  border-radius: 50%;
+  background: var(--series-observed);
+}
+
+.price-inner {
+  background: var(--price-inner);
+}
+
+.price-outer {
+  background: var(--price-outer);
+}
+
+.price-box {
+  border: 1px solid var(--ink-2);
+  border-radius: 2px;
+  background: var(--price-box);
+}
+
+.price-whisker {
+  width: 1px;
+  height: 12px;
+  margin: 0 7.5px;
+  background: var(--ink-2);
+}
+
+.price-extremes {
+  width: 0;
+  height: 12px;
+  margin: 0 7.5px;
+  border-left: 1px dashed var(--muted);
+}
+
+.price-day {
+  width: 0;
+  height: 12px;
+  margin: 0 7px;
+  border-left: 1.5px dashed var(--ink);
+}
+
+/* The min–max switch: a native switch button, a track and a knob. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 550;
+  color: var(--ink-2);
+}
+
+.toggle-track {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  border-radius: 8px;
+  background: var(--axis);
+  transition: background 120ms;
+}
+
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform 120ms;
+}
+
+.toggle[aria-checked="true"] .toggle-track {
+  background: var(--ink);
+}
+
+.toggle[aria-checked="true"] .toggle-track::after {
+  transform: translateX(11px);
+}
+
+/* The two Over time charts zoom by dragging across them (ADR-0019). */
+.zoomable {
+  cursor: crosshair;
+  user-select: none;
+}
+
+.zoom-selection {
+  fill: rgba(42, 120, 214, 0.12);
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+
+.zoom-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.zoom input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: var(--surface);
 }
 
 /* ---------- Headline numbers ---------- */
@@ -665,6 +936,21 @@ footer p {
   }
   .hero {
     padding: 0;
+  }
+  .tabs {
+    padding: 0 8px;
+  }
+  .tabs [role="tab"] {
+    padding: 12px 8px 10px;
+  }
+  .tabs-bar {
+    padding: 0 8px 0 12px;
+  }
+  .tabs-title {
+    padding-right: 8px;
+  }
+  .sparkline {
+    display: none;
   }
   h2 {
     font-size: 20px;

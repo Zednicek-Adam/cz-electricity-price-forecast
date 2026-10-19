@@ -27,11 +27,39 @@ export type Figures = Record<Metric, number | null>;
  * window of its last 30 scored delivery days (ADR-0017). */
 export type Scope = "whole" | "window";
 
-/** Per metric, each model's figures aligned with `running.dates`. */
+/** The three the hero chart's history switch reads: a scope, or the week of
+ * the last 7 scored delivery days (ADR-0018). */
+export type History = Scope | "week";
+
+/** The two trailing spans: the window and the week. */
+export type Trailing = Exclude<History, "whole">;
+
+/** The last `days` calendar delivery days up to the last scored one. */
+export interface Span {
+  days: number;
+  first: DeliveryDate;
+  last: DeliveryDate;
+}
+
+/** What a profile groups the whole record's delivery periods by (ADR-0018):
+ * the weekday of their delivery day, or their period ordinal. */
+export type Profile = "weekday" | "period";
+
+/** Per metric, each model's figures, aligned with `running.dates` or with a
+ * profile's buckets. */
 export type MetricSeriesByModel = Record<
   Metric,
   Partial<Record<ModelSlug, (number | null)[]>>
 >;
+
+/** The statistics a price distribution is summarised by (ADR-0019): its mean,
+ * and its minimum, 10th, 25th, 50th, 75th and 90th percentiles and maximum. */
+export type PriceStatistic =
+  "mean" | "min" | "p10" | "q1" | "median" | "q3" | "p90" | "max";
+
+/** Per statistic, the observed price's distribution, EUR/MWh, over each of a
+ * list of sets of delivery periods; `null` where a set is empty. */
+export type PriceDistribution = Record<PriceStatistic, (number | null)[]>;
 
 export interface Dashboard {
   /** Every delivery day from `first` to `last` is in `days`. `pending` is the
@@ -49,15 +77,30 @@ export interface Dashboard {
    * the ratio of two running MAEs. Each model's values are aligned with
    * `dates`, `null` before its first scored day. */
   running: { dates: DeliveryDate[] } & MetricSeriesByModel;
-  /** The trailing metric on the same days (ADR-0017): each figure covers the
-   * `window.days` calendar delivery days ending on that day, `null` until a
-   * whole window fits inside the record. */
-  trailing: MetricSeriesByModel;
-  /** The last `days` delivery days up to the last scored one: the `window`
-   * scope of `accuracy` and `comparisons`. */
-  window: { days: number; first: DeliveryDate; last: DeliveryDate };
-  /** Per scope, each model's four metrics. */
-  accuracy: Record<Scope, Partial<Record<ModelSlug, Figures>>>;
+  /** Per trailing span, the trailing metric on the same days (ADR-0017): each
+   * figure covers the span's `days` calendar delivery days ending on that
+   * day, `null` until a whole span fits inside the record. */
+  trailing: Record<Trailing, MetricSeriesByModel>;
+  /** The last 30 days: the `window` of every keyed record here. */
+  window: Span;
+  /** The last 7 days: the `week` of every keyed record here. */
+  week: Span;
+  /** Per history and profile, each model's figures in each bucket: the seven
+   * weekdays from Monday, or the 24 period ordinals from 1. `null` where a
+   * model has no figure in a bucket. */
+  profiles: Record<History, Record<Profile, MetricSeriesByModel>>;
+  /** Per history, each model's four metrics. */
+  accuracy: Record<History, Partial<Record<ModelSlug, Figures>>>;
+  /** The observed price's distribution over the cuts the metrics take
+   * (ADR-0019): each scored delivery day's own periods, aligned with
+   * `running.dates`; per trailing span, the span ending on each of those
+   * days, `null` until a whole span fits; and per history and profile, each
+   * bucket. */
+  prices: {
+    daily: PriceDistribution;
+    trailing: Record<Trailing, PriceDistribution>;
+    profiles: Record<History, Record<Profile, PriceDistribution>>;
+  };
   /** Per scope, each model's Diebold–Mariano statistic against each
    * opponent, by period ordinal minus one; `null` where the test could not be
    * computed. */
@@ -106,19 +149,50 @@ export interface DailyMetric {
   values: number[];
 }
 
-/** One model's running or trailing figures, aligned with `MetricOverTime.deliveryDates`. */
+/** One model's running or trailing figures, aligned with
+ * `MetricOverTime.deliveryDates`, or its figures in a profile's buckets. */
 export interface MetricSeries {
   model: ModelSlug;
   values: (number | null)[];
 }
 
-/** The Over time and 30-day views: every model's running or trailing metric
+/** The Over time view: every model's running or trailing metric
  * on every scored delivery day. */
 export interface MetricOverTime {
   kind: "running" | "trailing";
+  /** The trailing span's length in days; null for the running metric. */
+  days: number | null;
   metric: Metric;
   deliveryDates: DeliveryDate[];
   series: MetricSeries[];
+}
+
+/** The By weekday and By hour views: every model's figure in each of a
+ * profile's buckets, over the scope's days. */
+export interface MetricProfile {
+  by: Profile;
+  scope: History;
+  metric: Metric;
+  series: MetricSeries[];
+}
+
+/** The price chart's Over time view: on every scored delivery day, the
+ * distribution of that day's own prices, or of the trailing span ending on
+ * it. */
+export interface PriceOverTime {
+  kind: "daily" | "trailing";
+  /** The trailing span's length in days; null for the daily distribution. */
+  days: number | null;
+  deliveryDates: DeliveryDate[];
+  distribution: PriceDistribution;
+}
+
+/** The price chart's By weekday and By hour views: the distribution of the
+ * prices in each of a profile's buckets, over the history's days. */
+export interface PriceProfile {
+  by: Profile;
+  history: History;
+  distribution: PriceDistribution;
 }
 
 /** The Diebold–Mariano card: one model against each opponent. H1 is that the
