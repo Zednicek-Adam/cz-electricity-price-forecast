@@ -1,12 +1,15 @@
 /**
- * The dashboard (ADR-0007, ADR-0017, ADR-0018, ADR-0019): the price chart, one
- * hero chart with four views behind tabs, then the scoreboard.
+ * The dashboard (ADR-0007, ADR-0017, ADR-0018, ADR-0019): one hero chart with
+ * four views behind tabs, the price chart under it, then the scoreboard.
  *
  * - **Price chart** — the observed price's distribution over the cut the hero
- *   chart shows. Its tabs and history switch are the hero chart's own, drawn a
- *   second time, so the two charts always show the same cut. It folds away,
- *   and it is folded on the Day view, whose chart is the day's price. Its Over
- *   time shares the hero chart's zoom: a span of days both draw.
+ *   chart shows, under the hero chart, so folding it never moves that chart.
+ *   Its tabs and history switch are the hero chart's own, drawn a second
+ *   time, so the two charts always show the same cut. It folds away to one
+ *   bar that opens it again. The Day view opens with it folded, since
+ *   that view's chart is the day's price; unfolded there, it draws the daily
+ *   price with the open day marked. Its Over time shares the hero chart's
+ *   zoom: a span of days both draw.
  *
  * - **Day** — one delivery day's prices. Its metric selector sits in the
  *   day's accuracy panel beneath the chart, because there it rescores the
@@ -53,6 +56,7 @@ import {
   PriceKey,
   PriceOverTimeChart,
   PriceProfileChart,
+  PriceSparkline,
 } from "./PriceChart.tsx";
 import {
   formatDay,
@@ -102,8 +106,9 @@ export function App({ data }: { data: Dashboard }) {
   const [deliveryDate, setDeliveryDate] = useState<DeliveryDate>(record.last);
   const [dmModel, setDmModel] = useState<ModelSlug>(HEADLINE_MODEL);
   const [scope, setScope] = useState<Scope>("whole");
-  // Whether the price chart is unfolded on the views it draws; the Day view
-  // folds it regardless (ADR-0019).
+  // Whether the price chart is unfolded, kept apart for the Day view: it
+  // opens folded there, as that view's chart is the day's price (ADR-0019).
+  const [dayPricesOpen, setDayPricesOpen] = useState(false);
   const [pricesOpen, setPricesOpen] = useState(true);
   // The span of days both Over time charts draw; null draws them all.
   const [zoom, setZoom] = useState<Zoom>(null);
@@ -143,22 +148,6 @@ export function App({ data }: { data: Dashboard }) {
         </p>
       )}
       <main>
-        <section className="card hero prices" aria-label="Price chart">
-          <PriceCard
-            data={data}
-            view={view}
-            onView={(next) => {
-              setView(next);
-              setPricesOpen(true);
-            }}
-            history={history}
-            onHistory={setHistory}
-            open={pricesOpen}
-            onOpen={setPricesOpen}
-            zoom={zoom}
-            onZoom={setZoom}
-          />
-        </section>
         <section className="card hero" aria-label="Hero chart">
           <ViewTabs
             id="hero"
@@ -201,6 +190,20 @@ export function App({ data }: { data: Dashboard }) {
               />
             )}
           </div>
+        </section>
+        <section className="card hero prices" aria-label="Price chart">
+          <PriceCard
+            data={data}
+            view={view}
+            onView={setView}
+            date={deliveryDate}
+            history={history}
+            onHistory={setHistory}
+            open={view === "day" ? dayPricesOpen : pricesOpen}
+            onOpen={view === "day" ? setDayPricesOpen : setPricesOpen}
+            zoom={zoom}
+            onZoom={setZoom}
+          />
         </section>
 
         <section className="scoreboard" aria-labelledby="scoreboard-title">
@@ -455,6 +458,7 @@ interface PriceCardProps {
   data: Dashboard;
   view: View;
   onView: (view: View) => void;
+  date: DeliveryDate;
   history: History;
   onHistory: (history: History) => void;
   open: boolean;
@@ -463,14 +467,42 @@ interface PriceCardProps {
   onZoom: (zoom: Zoom) => void;
 }
 
-/** The price chart: a bar with the hero chart's tabs and a fold button, and
- * beneath it, unless folded, the price over the hero chart's cut. Choosing a
- * tab here unfolds it. */
+/** The price chart. Unfolded: a bar with the hero chart's tabs and a fold
+ * button, and beneath it the price over the hero chart's cut. Folded: one
+ * button across the bar, naming what it would draw beside a preview of it. */
 function PriceCard(props: PriceCardProps) {
-  const { data, view, onView, history, onHistory, open, onOpen } = props;
-  const folded = view === "day" || !open;
+  const { data, view, onView, date, history, onHistory, open, onOpen } = props;
   // Whether the box plots draw the minimum and maximum; kept while folded.
   const [extremes, setExtremes] = useState(false);
+
+  if (!open) {
+    return (
+      <>
+        <div className="tabs-bar">
+          <button
+            type="button"
+            className="fold-bar"
+            aria-expanded={false}
+            aria-controls="price-panel"
+            aria-label="Show the price chart"
+            aria-describedby="price-summary"
+            onClick={() => onOpen(true)}
+          >
+            <span className="tabs-title">Price</span>
+            <span id="price-summary" className="fold-summary">
+              {priceTitle(data, view, history)} · {SCOPE_LABELS[history]}
+            </span>
+            <PriceSparkline values={priceMeans(data, view, history)} />
+            <span className="fold-action">
+              <span className="chevron" aria-hidden="true" />
+              Show
+            </span>
+          </button>
+        </div>
+        <div id="price-panel" className="panel" hidden />
+      </>
+    );
+  }
 
   return (
     <>
@@ -482,42 +514,59 @@ function PriceCard(props: PriceCardProps) {
           view={view}
           onChange={onView}
         />
-        {view !== "day" && (
-          <button
-            type="button"
-            className="fold"
-            aria-expanded={open}
-            aria-controls="price-panel"
-            aria-label={open ? "Hide the price chart" : "Show the price chart"}
-            onClick={() => onOpen(!open)}
-          >
-            <span className="chevron" aria-hidden="true" />
-            {open ? "Hide" : "Show"}
-          </button>
-        )}
+        <button
+          type="button"
+          className="fold"
+          aria-expanded={true}
+          aria-controls="price-panel"
+          aria-label="Hide the price chart"
+          onClick={() => onOpen(false)}
+        >
+          <span className="chevron" aria-hidden="true" />
+          Hide
+        </button>
       </div>
       <div
         role="tabpanel"
         id="price-panel"
         aria-labelledby={`price-tab-${view}`}
         className="panel"
-        hidden={folded}
       >
-        {!folded && (
-          <PriceView
-            data={data}
-            view={view}
-            history={history}
-            onHistory={onHistory}
-            extremes={extremes}
-            onExtremes={setExtremes}
-            zoom={props.zoom}
-            onZoom={props.onZoom}
-          />
-        )}
+        <PriceView
+          data={data}
+          view={view}
+          date={date}
+          history={history}
+          onHistory={onHistory}
+          extremes={extremes}
+          onExtremes={setExtremes}
+          zoom={props.zoom}
+          onZoom={props.onZoom}
+        />
       </div>
     </>
   );
+}
+
+/** The price chart's title; the Day view draws the Over time chart. */
+function priceTitle(data: Dashboard, view: View, history: History): string {
+  if (view === "weekday" || view === "period") {
+    return `Price by ${view === "weekday" ? "weekday" : "hour"}`;
+  }
+  return history === "whole"
+    ? "Daily price"
+    : `${data[history].days}-day price`;
+}
+
+/** The means the price chart would draw, for the folded bar's preview. */
+function priceMeans(
+  data: Dashboard,
+  view: View,
+  history: History,
+): (number | null)[] {
+  return view === "weekday" || view === "period"
+    ? priceProfile(data, view, history).distribution.mean
+    : priceOverTime(data, history).distribution.mean;
 }
 
 /** The observed price over the cut the hero chart shows: each day's or each
@@ -525,6 +574,7 @@ function PriceCard(props: PriceCardProps) {
 function PriceView({
   data,
   view,
+  date,
   history,
   onHistory,
   extremes,
@@ -533,7 +583,8 @@ function PriceView({
   onZoom,
 }: {
   data: Dashboard;
-  view: Exclude<View, "day">;
+  view: View;
+  date: DeliveryDate;
   history: History;
   onHistory: (history: History) => void;
   extremes: boolean;
@@ -541,12 +592,11 @@ function PriceView({
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
 }) {
-  const title =
-    view !== "overTime"
-      ? `Price by ${view === "weekday" ? "weekday" : "hour"}`
-      : history === "whole"
-        ? "Daily price"
-        : `${data[history].days}-day price`;
+  const profile = view === "weekday" || view === "period";
+  // On the Day view, the open day is marked; the pending day has no price.
+  const prices = priceOverTime(data, history);
+  const marked =
+    view === "day" && prices.deliveryDates.includes(date) ? date : undefined;
 
   return (
     <>
@@ -555,10 +605,10 @@ function PriceView({
           <p className="eyebrow">
             {SCOPE_LABELS[history]} · {scopeRange(data, history)}
           </p>
-          <h3 className="panel-title">{title}</h3>
+          <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
         </div>
         <div className="chart-switches">
-          {view !== "overTime" && (
+          {profile && (
             <button
               type="button"
               role="switch"
@@ -579,13 +629,18 @@ function PriceView({
           />
         </div>
       </div>
-      <PriceKey box={view !== "overTime"} extremes={extremes} />
-      {view === "overTime" ? (
+      <PriceKey
+        box={profile}
+        extremes={extremes}
+        day={marked && formatDay(marked)}
+      />
+      {!profile ? (
         <>
           <PriceOverTimeChart
-            prices={priceOverTime(data, history)}
+            prices={prices}
             zoom={zoom}
             onZoom={onZoom}
+            marked={marked}
           />
           <ZoomBar days={data.running.dates} zoom={zoom} onZoom={onZoom} />
         </>

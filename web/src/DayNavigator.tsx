@@ -10,6 +10,7 @@
  * model's published per-day figures; nothing here computes a metric. For every
  * metric on the page a larger figure is a worse day.
  */
+import { DateInput } from "./DateInput.tsx";
 import { addDays, inRecord } from "./record.ts";
 import type { DailyMetric, Dashboard, DeliveryDate } from "./types.ts";
 
@@ -30,16 +31,13 @@ export function DateStepper({ record, day, onPick }: StepperProps) {
       >
         <Chevron direction="left" />
       </button>
-      <input
-        type="date"
-        aria-label="Delivery day"
+      <DateInput
+        label="Delivery day"
         value={day}
         min={record.first}
         max={record.last}
-        onChange={(event) => {
-          if (inRecord(record, event.target.value)) {
-            onPick(event.target.value);
-          }
+        onChange={(value) => {
+          if (inRecord(record, value)) onPick(value);
         }}
       />
       <button
