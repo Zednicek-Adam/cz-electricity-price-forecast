@@ -7,6 +7,8 @@ ahead, then scores each forecast against the price the market actually set.
 
 **The dashboard:** <https://cz-epf.adam-zednicek123.workers.dev>
 
+![The dashboard's Day view: one delivery day's real price as a black line, with each model's forecast for the same 24 hours drawn over it, and below it each model's average miss for the day](docs/images/dashboard-day.png)
+
 ## The problem in a minute
 
 Much of Europe's electricity, Czechia's included, is traded the day before it
@@ -21,39 +23,38 @@ zero, and in the 2022 energy crisis they more than doubled. Anyone who buys,
 sells or stores electricity wants a good guess at them before the auction.
 Making that guess is electricity price forecasting.
 
-This project makes the guess every afternoon for the next day whose prices are
-not out yet, and keeps a public scoreboard of how close each guess came.
+This project makes the guess every afternoon, for the first day whose prices
+are not out yet, and scores it once they are:
 
-## How good are the forecasts?
+![A timeline over three days. Monday noon, the auction sets Tuesday's prices. Monday afternoon, the models forecast Wednesday. Tuesday noon, the auction sets Wednesday's prices. Tuesday afternoon, Wednesday's forecast is scored against them. Wednesday, the electricity is delivered.](docs/images/timeline.svg)
 
-Three models, scored over every day from 2020-01-01 to 2026-10-13 (2,478 days):
+## What the dashboard shows
 
-| Model | MAE (EUR/MWh) | rMAE |
-|---|---|---|
-| Chronos-2 | 17.1 | 0.654 |
-| AR-168 | 20.6 | 0.786 |
-| Naïve | 26.2 | 1.000 |
+The dashboard opens on the newest forecast, the one whose price is not
+published yet. It has four views:
 
-**MAE** is the average miss, per hour, in EUR/MWh. **rMAE** divides a model's
-MAE by the naïve's. The naïve is a deliberately simple forecast: each hour
-costs the same as it did yesterday. Below 1 beats it, so Chronos-2's 0.654
-means its errors are about a third smaller than the naïve's.
+- **Day**, pictured above: one day's real price (black) against each model's
+  24 hourly forecasts.
+- **Over time**: how each model's accuracy has developed since 2020, or over
+  the last 30 or 7 days.
+- **By weekday** and **By hour**: which days of the week and hours of the day
+  the models miss most.
 
-Most of the error comes from 2022, when prices were highest and swung hardest.
-The ratio barely moves with it: Chronos-2's rMAE stays between 0.59 and 0.71 in
-every year. The dashboard's figures update with every daily run; these are as
-of 2026-10-13.
+Accuracy is mostly read as **MAE**, the average miss per hour in EUR/MWh, and
+**rMAE**, a model's MAE divided by the naïve's. The naïve is a deliberately
+simple forecast, "each hour costs what it did yesterday", so an rMAE below 1
+means a model beat it.
 
-Up to 2026-10-13 the forecasts are a backtest, made after the fact by code that
-could only see the prices published before each day it forecast. From
-2026-10-14 the daily run forecasts each day before its price exists. Both are
-scored the same way and kept in one record.
+Below the chart are the price over the same days, the accuracy table, and a
+statistical test (Diebold–Mariano) of whether one model really beats another
+or just got lucky. [Reading the figures](docs/reading-the-figures.md) explains
+every number and chart.
 
-**These rMAE figures are not comparable to published electricity-price-forecasting
-research, to the thesis this project builds on, or to any other test window.**
-The literature measures against a seasonal naïve (a week back on Mondays and
-weekends); this project uses the simpler day-lag naïve, and only over this
-record.
+**The rMAE on this dashboard is not comparable to published
+electricity-price-forecasting research, to the thesis this project builds on,
+or to any other test window.** The literature measures against a seasonal naïve
+(a week back on Mondays and weekends); this project uses the simpler day-lag
+naïve, and only over its own record.
 
 ## The models
 
@@ -67,8 +68,13 @@ demand, no gas price.
 - **AR-168**, a classic statistical model: a linear regression on the last 168
   hourly price changes, refitted every day. It is ported from the author's
   diploma thesis.
-- **Naïve**, yesterday's price for the same hour. It is the yardstick that rMAE
-  is measured against.
+- **Naïve**, yesterday's price for the same hour. It is the yardstick the
+  others are measured against.
+
+The record goes back to 2020. Up to 2026-10-13 it is a backtest, forecasts
+made after the fact by code that could only see the prices published before
+each day it forecast. From 2026-10-14 every forecast is made before its price
+exists. Both are scored the same way.
 
 ## Why the numbers can be checked
 
@@ -84,24 +90,8 @@ demand, no gas price.
   [`data/`](data/), every figure is recomputed from them on each deploy, and a
   forecast made before its price was published is never replaced.
 
-The full list, with the per-year figures and the model details, is in
+The full list and the model details are in
 [The record in detail](docs/the-record.md).
-
-## What the dashboard shows
-
-The dashboard opens on the newest forecast, the one whose price is not
-published yet. It has four views:
-
-- **Day**: one day's real price against each model's 24 hourly forecasts.
-- **Over time**: each model's accuracy since 2020, or over the last 30 or 7
-  days.
-- **By weekday** and **By hour**: which days of the week and hours of the day
-  the models miss most.
-
-Below the chart are the price over the same days, the accuracy table, and a
-statistical test (Diebold–Mariano) of whether one model really beats another
-or just got lucky. [Reading the figures](docs/reading-the-figures.md) explains
-every number and chart.
 
 ## How it works
 
@@ -112,9 +102,8 @@ ENTSO-E ──► daily run ──► data/*.csv ──► export ──► dash
 
 Every afternoon a GitHub Actions workflow fetches the newest prices from the
 ENTSO-E Transparency Platform, where Europe's grid operators publish market
-data. Each model then
-forecasts the next unpublished day, and the workflow commits prices and
-forecasts to `data/`. That commit triggers a deploy, where a script recomputes
+data. Each model then forecasts the next unpublished day, and the workflow
+commits prices and forecasts to `data/`. That commit triggers a deploy, where a script recomputes
 every figure into one JSON file and the static dashboard reads it. There is no
 database and no server.
 
@@ -145,8 +134,8 @@ The checks, CI, backtests and the daily run are in
 
 - [Reading the figures](docs/reading-the-figures.md): every metric and chart,
   in plain language.
-- [The record in detail](docs/the-record.md): full results, the models, and how
-  the record is kept honest.
+- [The record in detail](docs/the-record.md): a dated snapshot of the results,
+  the models, and how the record is kept honest.
 - [Development](docs/development.md): building, testing, CI and the daily run.
 - [`data/README.md`](data/README.md): where the prices come from and how they
   are stored.

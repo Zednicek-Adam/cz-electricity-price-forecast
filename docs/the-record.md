@@ -1,7 +1,8 @@
 # The record in detail
 
-The long version of the README's results, models and "why the numbers can be
-checked" sections. What each metric means and how it is computed is in
+The results as of 2026-10-13, and the long version of the README's models and
+"why the numbers can be checked" sections. The live figures are on the
+[dashboard](https://cz-epf.adam-zednicek123.workers.dev). What each metric means and how it is computed is in
 [Reading the figures](reading-the-figures.md); the definitions of record are in
 [`CONTEXT.md`](../CONTEXT.md).
 
