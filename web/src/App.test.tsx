@@ -737,6 +737,17 @@ describe("the min–max switch", () => {
 
     expect(screen.queryByRole("switch", { name: "Min – max" })).toBeNull();
   });
+
+  test("leaves the extremes out of the key where they are not drawn", async () => {
+    await openDay();
+    tab("By hour");
+    fireEvent.click(screen.getByRole("switch", { name: "Min – max" }));
+
+    tab("Over time");
+
+    const legend = within(priceChart()).getByRole("list", { name: "Legend" });
+    expect(legend.textContent).not.toContain("Min – max");
+  });
 });
 
 describe("the zoom", () => {

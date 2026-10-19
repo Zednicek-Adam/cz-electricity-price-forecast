@@ -631,7 +631,7 @@ function PriceView({
       </div>
       <PriceKey
         box={profile}
-        extremes={extremes}
+        extremes={profile && extremes}
         day={marked && formatDay(marked)}
       />
       {!profile ? (
