@@ -4,8 +4,8 @@ status: accepted
 
 # Four views and a history switch: the hero chart gains a weekday and an hour profile
 
-> **Amended by [ADR-0019](0019-a-price-chart-above-the-hero-chart.md).** A
-> price chart above the hero chart draws its tabs and history switch a second
+> **Amended by [ADR-0019](0019-a-price-chart-below-the-hero-chart.md).** A
+> price chart below the hero chart draws its tabs and history switch a second
 > time, on the same state.
 
 > **Amends [ADR-0017](0017-three-views-two-metric-switches-and-a-30-day-window.md)**,

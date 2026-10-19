@@ -290,15 +290,16 @@ _Avoid_: significance test, DM p-value (unqualified)
 **Hero chart** — the single chart the dashboard leads with, carrying four
 views behind tabs: Day, Over time, By weekday and By hour (ADR-0007, ADR-0017,
 ADR-0018). There is exactly one; a second chart competing with it is a design
-error, not a feature. The **price chart** above it does not compete: it
+error, not a feature. The **price chart** below it does not compete: it
 follows the hero chart's cut and carries no model (ADR-0019).
 _Avoid_: main chart, primary graph
 
-**Price chart** — the chart above the hero chart that draws the observed
+**Price chart** — the chart below the hero chart that draws the observed
 price's **price distribution** over the cut the hero chart's metric takes. Its
 tabs and history switch are the hero chart's, drawn a second time on the same
-state, so either chart's controls move both. It folds, and it is folded on the
-Day view, whose chart is that day's price. Its **min–max switch** draws the
+state, so either chart's controls move both. It folds, and the Day view opens
+with it folded, as that view's chart is that day's price; unfolded there it
+marks the open day on the daily price. Its **min–max switch** draws the
 extremes on the box plots. See ADR-0019.
 _Avoid_: price graph, second chart
 

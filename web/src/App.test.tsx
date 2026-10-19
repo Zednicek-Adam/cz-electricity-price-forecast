@@ -15,7 +15,12 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { App } from "./App.tsx";
 import { loadDashboard } from "./dashboard.ts";
-import { DASHBOARD, DASHBOARD_WITH_PENDING, PENDING_DAY } from "./fixture.ts";
+import {
+  DASHBOARD,
+  DASHBOARD_WITH_PENDING,
+  DAYS,
+  PENDING_DAY,
+} from "./fixture.ts";
 import { REPOSITORY_URL } from "./Footer.tsx";
 import { formatDay } from "./presentation.ts";
 
@@ -539,14 +544,18 @@ describe("the price chart", () => {
   const priceChart = () => screen.getByRole("region", { name: "Price chart" });
   const pricePanel = () => document.getElementById("price-panel");
 
-  test("is folded on the Day view, and unfolds on the others", async () => {
+  test("opens folded on the Day view, and unfolded on the others", async () => {
     await openDay();
 
     expect(pricePanel()?.hidden).toBe(true);
     expect(within(priceChart()).queryByRole("img")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Hide the price chart" }),
+      within(priceChart()).queryByRole("tablist", { name: "Price chart view" }),
     ).toBeNull();
+    const show = screen.getByRole("button", { name: "Show the price chart" });
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+    expect(show.getAttribute("aria-describedby")).toBe("price-summary");
+    within(priceChart()).getByText("Daily price · Whole record");
 
     tab("By hour");
 
@@ -622,26 +631,78 @@ describe("the price chart", () => {
     ).toMatch(/^The observed price over the trailing 7 days/);
   });
 
-  test("folds away, and choosing one of its tabs unfolds it", async () => {
+  test("unfolds on the Day view to the daily price, the open day marked", async () => {
+    // The fixture's running dates are not its days; here they are, so the
+    // price chart draws the open day.
+    render(
+      <App
+        data={{ ...DASHBOARD, running: { ...DASHBOARD.running, dates: DAYS } }}
+      />,
+    );
+    await dayTitle(OPENING_DAY);
+
+    click("Show the price chart");
+
+    expect(pricePanel()?.hidden).toBe(false);
+    await within(priceChart()).findByRole("heading", { name: "Daily price" });
+    expect(
+      within(priceChart()).getByRole("img").getAttribute("aria-label"),
+    ).toMatch(/^Each delivery day's observed price/);
+    within(priceChart()).getByText(formatDay(OPENING_DAY));
+    expect(
+      within(priceChart()).getByRole("img").querySelector(".price-marked"),
+    ).not.toBeNull();
+    expect(
+      within(priceChart())
+        .getByRole("tablist", { name: "Price chart view" })
+        .querySelector('[aria-selected="true"]')?.textContent,
+    ).toBe("Day");
+  });
+
+  test("marks nothing on the pending day, which has no price yet", async () => {
+    render(<App data={DASHBOARD_WITH_PENDING} />);
+    await dayTitle(PENDING_DAY);
+
+    click("Show the price chart");
+
+    const chart = await within(priceChart()).findByRole("img");
+    expect(chart.querySelector(".price-marked")).toBeNull();
+    expect(within(priceChart()).queryByText(formatDay(PENDING_DAY))).toBeNull();
+  });
+
+  test("folds to one bar, which unfolds it", async () => {
     await openDay();
     tab("Over time");
 
     click("Hide the price chart");
 
     expect(pricePanel()?.hidden).toBe(true);
-    const show = screen.getByRole("button", { name: "Show the price chart" });
-    expect(show.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(priceChart()).queryByRole("tablist", { name: "Price chart view" }),
+    ).toBeNull();
     tab("By hour");
     expect(pricePanel()?.hidden).toBe(true);
+    within(priceChart()).getByText("Price by hour · Whole record");
 
-    fireEvent.click(
-      within(
-        within(priceChart()).getByRole("tablist", { name: "Price chart view" }),
-      ).getByRole("tab", { name: "By weekday" }),
-    );
+    click("Show the price chart");
 
     expect(pricePanel()?.hidden).toBe(false);
-    await heroTitle("MAE by weekday");
+    await within(priceChart()).findByRole("heading", {
+      name: "Price by hour",
+    });
+  });
+
+  test("keeps the Day view's fold apart from the other views'", async () => {
+    await openDay();
+    click("Show the price chart");
+    tab("Over time");
+    click("Hide the price chart");
+
+    tab("Day");
+
+    expect(pricePanel()?.hidden).toBe(false);
+    tab("By weekday");
+    expect(pricePanel()?.hidden).toBe(true);
   });
 });
 

@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-# A price chart above the hero chart, on the hero chart's cut
+# A price chart below the hero chart, on the hero chart's cut
 
 > **Amends [ADR-0007](0007-the-dashboards-ten-second-story.md)**, which made
 > the hero chart the only chart above the scoreboard, and
@@ -17,7 +17,7 @@ only place the observed price is drawn, and it shows one day.
 
 ## The decision
 
-**A price chart sits above the hero chart.** It draws the observed price's
+**A price chart sits below the hero chart.** It draws the observed price's
 **distribution** over the cut the hero chart's metric takes:
 
 - **Over time**: on every scored delivery day, the mean as a line with the
@@ -40,7 +40,7 @@ scale and flatten everything else.
 history switch are the hero chart's own state, drawn a second time, so the
 two charts always show the same cut and either chart's controls move both. It
 has no metric switch and no model series. It has the hero chart's width and
-margins, so its x axis lines up with the one below it.
+margins, so its x axis lines up with the one above it.
 
 **The two Over time views share a zoom.** Over the whole record a season
 is a few pixels wide. Dragging across either Over time chart zooms both to
@@ -51,9 +51,16 @@ ribbon (ADR-0009). Its accessible form is the zoom bar under each chart: two
 native date inputs and a reset button. The zoom is page state, like the view
 and the history, so it holds across the history switch and across tabs.
 
-**It folds.** A button in its bar hides it, and choosing one of its tabs
-shows it again. On the Day view it is folded and the button is gone, because
-the Day chart already draws that day's prices.
+**It folds.** A button in its bar hides it. Folded, the bar is one button
+that shows it again: the chart's title and history, a sparkline of the mean
+it would draw, and a Show button. The tabs are not drawn while it is folded,
+because a second row of tabs with nothing under it reads as a second
+navigation. The Day view opens with it folded, because the Day chart already
+draws that day's prices. Unfolded there, it draws the Over time price chart,
+the daily or trailing price, with the open day marked, so the day can be
+read against the record around it. The pending day has no price, so on that
+day nothing is marked. The Day view's fold is kept apart from the other
+three views', so opening it on one does not unfold or fold the other.
 
 **The export computes it.** `dashboard.json` gains a `prices` key: `daily`
 on each scored day, `trailing` per span, and `profiles` per history and
@@ -65,6 +72,11 @@ pool. Quantiles are linear, numpy's default. The browser draws the figures
 and computes none of them, as with every other figure on the page.
 
 ## Considered options
+
+**The price chart above the hero chart**, where it was first built. Rejected:
+unfolding it, or choosing a tab that unfolds it, pushed the hero chart down
+the page under the reader's pointer. Below the hero chart it grows into the
+space under the chart being read, and the hero chart never moves.
 
 **Computing the distributions in the browser** from the observed prices
 already in `days`. Rejected: the page computes no figure (ADR-0016), and a

@@ -314,7 +314,71 @@ a {
   transform: translateY(1px) rotate(-135deg);
 }
 
-.fold[aria-expanded="false"] .chevron {
+/* Folded, the whole bar is one button: the title, what the chart would draw,
+   a preview of it, and a Show that looks like the Hide it replaces. */
+.fold-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.fold-bar:hover:not(:disabled) {
+  background: none;
+}
+
+.fold-bar:focus-visible {
+  outline-offset: -2px;
+}
+
+.fold-bar .tabs-title {
+  font-weight: 650;
+}
+
+.fold-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.sparkline {
+  flex: none;
+  opacity: 0.55;
+  transition: opacity 120ms;
+}
+
+.fold-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  transition: background 120ms;
+}
+
+.fold-bar:hover .sparkline {
+  opacity: 1;
+}
+
+.fold-bar:hover .fold-action {
+  background: var(--surface-2);
+  border-color: var(--ink-2);
+}
+
+.fold-action .chevron {
   transform: translateY(-2px) rotate(45deg);
 }
 
@@ -502,6 +566,13 @@ button:disabled {
   height: 12px;
   margin: 0 7.5px;
   border-left: 1px dashed var(--muted);
+}
+
+.price-day {
+  width: 0;
+  height: 12px;
+  margin: 0 7px;
+  border-left: 1.5px dashed var(--ink);
 }
 
 /* The min–max switch: a native switch button, a track and a knob. */
@@ -877,6 +948,9 @@ footer p {
   }
   .tabs-title {
     padding-right: 8px;
+  }
+  .sparkline {
+    display: none;
   }
   h2 {
     font-size: 20px;

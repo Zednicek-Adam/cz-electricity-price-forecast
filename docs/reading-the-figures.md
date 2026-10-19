@@ -136,7 +136,7 @@ from a Friday, and over the whole record those are its worst days. Every model
 misses far less at night than by day. The rMAE in these views divides by the
 naïve's MAE in the same bucket, so the naïve reads 1.000 at every point.
 
-**The price chart** above the hero chart shows what the price did over the
+**The price chart** below the hero chart shows what the price did over the
 same days, so a miss can be read against the market. It follows the hero
 chart's tab and its Whole record / Last 30 days / Last 7 days switch, and
 either chart's controls move both. In **Over time** the line is the mean price

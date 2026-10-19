@@ -13,8 +13,8 @@ status: accepted
 > two, each beside what it changes; and the scoreboard gains a last-30-days
 > scope. That ADR is also the front-end quality pass deferred below.
 >
-> **Amended by [ADR-0019](0019-a-price-chart-above-the-hero-chart.md).** A
-> price chart sits above the hero chart. It follows the hero chart's cut and
+> **Amended by [ADR-0019](0019-a-price-chart-below-the-hero-chart.md).** A
+> price chart sits below the hero chart. It follows the hero chart's cut and
 > carries no model, so it does not compete with it.
 
 The dashboard leads with **a single hero chart carrying two views**, switched in

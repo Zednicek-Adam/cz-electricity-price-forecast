@@ -1,5 +1,5 @@
 /**
- * The price chart above the hero chart (ADR-0019): the observed price's
+ * The price chart below the hero chart (ADR-0019): the observed price's
  * distribution over the same cut the hero chart's metric takes, so a miss can
  * be read against how the price behaved.
  *
@@ -13,10 +13,12 @@
  * The extremes are in the tooltip, and on the plot only when the min–max
  * switch is on, as a dashed whisker beyond each box: a 2022 spike or a sunny
  * Sunday's negative hour would otherwise flatten everything else. Over time
- * shares the hero chart's zoom. The chart has the hero chart's width and
- * margins, so its x axis lines up with the one below.
+ * shares the hero chart's zoom, and on the Day view it marks the day open
+ * above it. The chart has the hero chart's width and margins, so its x axis
+ * lines up with the one above.
  */
 import type {
+  DeliveryDate,
   PriceDistribution,
   PriceOverTime,
   PriceProfile,
@@ -112,9 +114,12 @@ function readout(d: PriceDistribution, i: number, box: boolean): TooltipRow[] {
 export function PriceKey({
   box,
   extremes = false,
+  day,
 }: {
   box: boolean;
   extremes?: boolean;
+  /** The marked day's label, on the Day view. */
+  day?: string | undefined;
 }) {
   const key = marks(box);
   return (
@@ -141,6 +146,12 @@ export function PriceKey({
         <li>
           {key.extremes}
           Min – max
+        </li>
+      )}
+      {day && (
+        <li>
+          {swatch("day")}
+          {day}
         </li>
       )}
     </ul>
@@ -177,9 +188,16 @@ interface OverTimeProps {
   prices: PriceOverTime;
   zoom: Zoom;
   onZoom: (zoom: Zoom) => void;
+  /** The Day view's delivery day, marked when the chart draws it. */
+  marked?: DeliveryDate | undefined;
 }
 
-export function PriceOverTimeChart({ prices, zoom, onZoom }: OverTimeProps) {
+export function PriceOverTimeChart({
+  prices,
+  zoom,
+  onZoom,
+  marked,
+}: OverTimeProps) {
   const { kind } = prices;
   // The zoomed days, and the distribution cut to them.
   const [start, end] = zoomRange(prices.deliveryDates, zoom);
@@ -215,6 +233,8 @@ export function PriceOverTimeChart({ prices, zoom, onZoom }: OverTimeProps) {
   const { hovered, anchor, handlers } = useDragZoom(days, indexAt, onZoom);
 
   const mean = hovered === null ? null : (d.mean[hovered] ?? null);
+  const day = marked === undefined ? -1 : days.indexOf(marked);
+  const dayMean = day < 0 ? null : (d.mean[day] ?? null);
 
   return (
     <div className="chart-frame">
@@ -263,6 +283,29 @@ export function PriceOverTimeChart({ prices, zoom, onZoom }: OverTimeProps) {
             strokeLinejoin="round"
             fill="none"
           />
+          {day >= 0 && (
+            <g className="price-marked" pointerEvents="none">
+              <line
+                x1={x(day)}
+                x2={x(day)}
+                y1={MARGIN.top}
+                y2={BOTTOM}
+                stroke="var(--ink)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+              {dayMean !== null && (
+                <circle
+                  cx={x(day)}
+                  cy={y(dayMean)}
+                  r={4}
+                  fill="var(--ink)"
+                  stroke="var(--surface)"
+                  strokeWidth={2}
+                />
+              )}
+            </g>
+          )}
           {anchor !== null && hovered !== null && (
             <Selection
               from={anchor}
@@ -498,5 +541,42 @@ export function PriceProfileChart({ prices, extremes }: ProfileProps) {
         )}
       </div>
     </div>
+  );
+}
+
+/** The folded price chart's preview: the mean the chart would draw, as one
+ * line with no axes, so the folded bar reads as a chart to open. */
+export function PriceSparkline({ values }: { values: (number | null)[] }) {
+  const width = 112;
+  const height = 24;
+  const known = values.filter((v): v is number => v !== null);
+  if (known.length < 2) return null;
+  const x = scaleLinear({
+    domain: [0, values.length - 1],
+    range: [1, width - 1],
+  });
+  const y = scaleLinear({
+    domain: [Math.min(...known), Math.max(...known)],
+    range: [height - 2, 2],
+  });
+  return (
+    <svg
+      className="sparkline"
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      aria-hidden="true"
+    >
+      <LinePath
+        data={values.map((_, i) => i)}
+        defined={(i) => values[i] !== null}
+        x={(i) => x(i)}
+        y={(i) => y(values[i] ?? 0)}
+        stroke="var(--series-observed)"
+        strokeWidth={1.25}
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
   );
 }
