@@ -26,7 +26,7 @@ Making that guess is electricity price forecasting.
 This project makes the guess every afternoon, for the first day whose prices
 are not out yet, and scores it once they are:
 
-![A timeline over three days. Monday noon, the auction sets Tuesday's prices. Monday afternoon, the models forecast Wednesday. Tuesday noon, the auction sets Wednesday's prices. Tuesday afternoon, Wednesday's forecast is scored against them. Wednesday, the electricity is delivered.](docs/images/timeline.svg)
+![A timeline over three days. Monday noon, the auction sets Tuesday's prices. Monday afternoon, the models forecast Wednesday. Tuesday noon, the auction sets Wednesday's prices. Tuesday afternoon, Wednesday's forecast is scored against them. Wednesday is the delivery day being forecast.](docs/images/timeline.svg)
 
 ## What the dashboard shows
 
