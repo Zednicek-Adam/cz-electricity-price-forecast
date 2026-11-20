@@ -1,7 +1,7 @@
 # The record in detail
 
-The results as of 2026-10-13, and the long version of the README's models and
-"why the numbers can be checked" sections. The live figures are on the
+The results as of 2026-10-13, the models in more detail than the README gives,
+and why the figures can be checked rather than trusted. The live figures are on the
 [dashboard](https://cz-epf.adam-zednicek123.workers.dev). What each metric means and how it is computed is in
 [Reading the figures](reading-the-figures.md); the definitions of record are in
 [`CONTEXT.md`](../CONTEXT.md).
