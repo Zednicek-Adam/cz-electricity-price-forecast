@@ -12,21 +12,21 @@
  *   zoom: a span of days both draw.
  *
  * - **Day** — one delivery day's prices. Its metric selector sits in the
- *   day's accuracy panel beneath the chart, because there it rescores the
+ *   day's accuracy panel beside the chart, because there it rescores the
  *   day, the ribbon and the day navigator and never the chart.
  * - **Over time** — the running metric over the whole record, or the trailing
  *   30-day or 7-day metric.
  * - **By weekday** and **By hour** — the metric per weekday and per period
  *   ordinal, over the whole record or the last 30 or 7 days.
  *
- *   These three views share two switches in the chart's own bar, the history
- *   and the metric, because there they redraw the chart.
+ *   These three views share two switches in the sidebar beside the chart,
+ *   the history and the metric, because there they redraw the chart.
  * - **Scoreboard** — the accuracy table and the Diebold–Mariano card, under one
  *   scope switch: the whole record or the last 30 days.
  *
  * The page holds the state the controls share and selects what each view
  * draws out of the one file it was handed. Above the charts sits the
- * introduction, and beside each title a "?" opens a note that says in plain
+ * introduction, and beside each title a "How to read" opens a note that says in plain
  * words how to read it (ADR-0020): the page is written for a reader who has never
  * forecast a price. The pending day and a daily run that has stopped are
  * still the only claims the record cannot make by itself (ADR-0012).
@@ -126,24 +126,24 @@ export function App({ data }: { data: Dashboard }) {
       <header className="masthead">
         <div className="brand">
           <Logo />
-          <div>
-            <h1>CZ day-ahead price forecast</h1>
-            <p className="subtle">
-              Daily forecasts of Czech electricity prices, scored against the
-              real ones · {record.first} – {record.last}
-            </p>
-          </div>
+          <h1>CZ day-ahead price forecast</h1>
         </div>
-        {record.pending && (
-          <button
-            type="button"
-            className="pending-chip"
-            onClick={() => openDay(record.pending as DeliveryDate)}
-          >
-            <span className="pulse" aria-hidden="true" />
-            Latest forecast · {formatDay(record.pending)}
-          </button>
-        )}
+        <div className="masthead-line">
+          <p className="subtle">
+            Daily forecasts of Czech electricity prices, scored against the real
+            ones · {record.first} – {record.last}
+          </p>
+          {record.pending && (
+            <button
+              type="button"
+              className="pending-chip"
+              onClick={() => openDay(record.pending as DeliveryDate)}
+            >
+              <span className="pulse" aria-hidden="true" />
+              Latest forecast · {formatDay(record.pending)}
+            </button>
+          )}
+        </div>
       </header>
       {isStale(record, todayInPrague()) && (
         <p className="stale" role="status">
@@ -153,7 +153,7 @@ export function App({ data }: { data: Dashboard }) {
       )}
       <main>
         <Intro />
-        <section className="card hero" aria-label="Hero chart">
+        <section className="hero" aria-label="Hero chart">
           <ViewTabs
             id="hero"
             label="Hero chart view"
@@ -196,7 +196,7 @@ export function App({ data }: { data: Dashboard }) {
             )}
           </div>
         </section>
-        <section className="card hero prices" aria-label="Price chart">
+        <section className="hero prices" aria-label="Price chart">
           <PriceCard
             data={data}
             view={view}
@@ -211,9 +211,12 @@ export function App({ data }: { data: Dashboard }) {
           />
         </section>
 
-        <section className="scoreboard" aria-labelledby="scoreboard-title">
-          <div className="section-bar">
-            <div>
+        <section
+          className={models.length > 1 ? "scoreboard split" : "scoreboard"}
+          aria-labelledby="scoreboard-title"
+        >
+          <div className="scoreboard-main">
+            <div className="section-bar">
               <div className="titled">
                 <h2 id="scoreboard-title">Scoreboard</h2>
                 <Help label="How to read the scoreboard">
@@ -224,32 +227,32 @@ export function App({ data }: { data: Dashboard }) {
                       : "the last 30 days"}
                     . Each figure measures how far the forecasts landed from the
                     real price, so lower is better. The best figure in each
-                    column is in bold.
+                    column is in bold and underlined.
                   </p>
                 </Help>
               </div>
               <p className="subtle">
                 {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
               </p>
+              <Segmented
+                label="Scope"
+                options={SCOPES}
+                value={scope}
+                onChange={setScope}
+                name={(s) => SCOPE_LABELS[s]}
+              />
             </div>
-            <Segmented
-              label="Scope"
-              options={SCOPES}
-              value={scope}
-              onChange={setScope}
-              name={(s) => SCOPE_LABELS[s]}
-            />
-          </div>
-          <div className="card" role="region" aria-label="Accuracy">
-            <div className="card-bar">
-              <div className="titled">
-                <h3>Accuracy</h3>
-                <Help label="What the metrics mean">
-                  <MetricGlossary />
-                </Help>
+            <div className="card" role="region" aria-label="Accuracy">
+              <div className="card-bar">
+                <div className="titled">
+                  <h3>Accuracy</h3>
+                  <Help label="What the metrics mean">
+                    <MetricGlossary />
+                  </Help>
+                </div>
               </div>
+              <AccuracyTable rows={accuracy(data, scope)} scope={scope} />
             </div>
-            <AccuracyTable rows={accuracy(data, scope)} scope={scope} />
           </div>
           {models.length > 1 && (
             <div className="card" role="region" aria-label="Diebold–Mariano">
@@ -337,34 +340,36 @@ function DayView({ data, date, metric, onMetric, onPick }: DayViewProps) {
 
   return (
     <>
-      <div className="panel-bar">
-        <div>
-          <p className="eyebrow">
-            {unpublished ? "Delivery day · forecast" : "Delivery day"}
-          </p>
-          <div className="titled">
-            <h2>{formatDay(date)}</h2>
-            <Help label="How to read the day chart">
-              <p>
-                {unpublished
-                  ? "This day's prices are not set yet. The lines are the three models' forecasts for each hour. Once the auction publishes the real prices, the next update draws them in black and scores each model."
-                  : "The black line is the price the market set for each hour of this day. The coloured lines are the models' forecasts, each made from prices up to the day before. The closer a line follows the black one, the better the forecast."}
+      <div className="view">
+        <div className="view-main">
+          <div className="panel-bar">
+            <div>
+              <p className="eyebrow">
+                {unpublished ? "Delivery day · forecast" : "Delivery day"}
               </p>
-              <p>Period 1 is midnight to 1 a.m., Prague time.</p>
-            </Help>
+              <div className="titled">
+                <h2 className="lead">{formatDay(date)}</h2>
+                <Help label="How to read the day chart">
+                  <p>
+                    {unpublished
+                      ? "This day's prices are not set yet. The lines are the three models' forecasts for each hour. Once the auction publishes the real prices, the next update draws them in black and scores each model."
+                      : "The black line is the price the market set for each hour of this day. The coloured lines are the models' forecasts, each made from prices up to the day before. The closer a line follows the black one, the better the forecast."}
+                  </p>
+                  <p>Period 1 is midnight to 1 a.m., Prague time.</p>
+                </Help>
+              </div>
+            </div>
+            <DateStepper record={data.record} day={date} onPick={onPick} />
           </div>
+          <Legend
+            series={[
+              ...(day.observed ? (["observed"] as const) : []),
+              ...day.forecasts.map((f) => f.model),
+            ]}
+          />
+          <DayChart day={day} />
         </div>
-        <DateStepper record={data.record} day={date} onPick={onPick} />
-      </div>
-      <Legend
-        series={[
-          ...(day.observed ? (["observed"] as const) : []),
-          ...day.forecasts.map((f) => f.model),
-        ]}
-      />
-      <DayChart day={day} />
-      <div className="scoring" role="region" aria-label="Day accuracy">
-        <div className="scoring-bar">
+        <div className="view-side" role="region" aria-label="Day accuracy">
           <div className="titled">
             <h3>Accuracy on this day</h3>
             <Help label="What the metrics mean">
@@ -372,27 +377,27 @@ function DayView({ data, date, metric, onMetric, onPick }: DayViewProps) {
             </Help>
           </div>
           <MetricSelector metric={metric} onChange={onMetric} size="small" />
+          {unpublished ? (
+            <p className="note">
+              Not published yet: the price clears the day before delivery.
+            </p>
+          ) : (
+            <HeadlineNumbers metric={metric} figures={day.metrics} />
+          )}
         </div>
-        {unpublished ? (
-          <p className="note">
-            Not published yet: the price clears the day before delivery.
-          </p>
-        ) : (
-          <HeadlineNumbers metric={metric} figures={day.metrics} />
-        )}
-        {daily.values.length > 0 && (
-          <>
-            <div className="ribbon-bar">
-              <p className="subtle">
-                {MODEL_LABELS[daily.model]} · daily {label} on every scored day
-                · a taller spike is a worse day · click to open a day
-              </p>
-              <DayJumps daily={daily} onPick={onPick} />
-            </div>
-            <Ribbon daily={daily} selected={date} onPick={onPick} />
-          </>
-        )}
       </div>
+      {daily.values.length > 0 && (
+        <div className="view-foot">
+          <div className="ribbon-bar">
+            <p className="subtle">
+              {MODEL_LABELS[daily.model]} · daily {label} on every scored day ·
+              a taller spike is a worse day · click to open a day
+            </p>
+            <DayJumps daily={daily} onPick={onPick} />
+          </div>
+          <Ribbon daily={daily} selected={date} onPick={onPick} />
+        </div>
+      )}
     </>
   );
 }
@@ -412,8 +417,8 @@ interface ChartViewProps {
   onMetric: (metric: Metric) => void;
 }
 
-/** The chart views' two switches, in the chart's bar because both redraw it:
- * how much history the chart covers, and the metric. */
+/** The chart views' two switches, in the view's sidebar beside the chart,
+ * because both redraw it: how much history the chart covers, and the metric. */
 function ChartSwitches({ scope, onScope, metric, onMetric }: ChartViewProps) {
   return (
     <div className="chart-switches">
@@ -443,42 +448,46 @@ function TrendView(
   const figures = accuracy(data, scope);
 
   return (
-    <>
-      <div className="panel-bar">
-        <div>
-          <p className="eyebrow">
-            {running
-              ? "Running metric · from the first scored day"
-              : `Trailing ${series.days}-day window`}
-          </p>
-          <div className="titled">
-            <h2>
-              {running ? `${label} over time` : `${series.days}-day ${label}`}
-            </h2>
-            <Help label="How to read this chart">
-              <p>
-                {running
-                  ? "Each line is a model's accuracy from the start of the record up to each date, so the lines settle as the days add up."
-                  : `Each point is a model's accuracy over the ${series.days} days ending on that date, so you can see which model was ahead at any time.`}
-                {running &&
-                  (metric === "mae" || metric === "rmse") &&
-                  " The climb through 2022 is the energy crisis, when prices and their swings were several times their usual size."}
-              </p>
-              <p>Drag across the chart to zoom in.</p>
-              <MetricGlossary />
-            </Help>
+    <div className="view">
+      <div className="view-main">
+        <div className="panel-bar">
+          <div>
+            <p className="eyebrow">
+              {running
+                ? "Running metric · from the first scored day"
+                : `Trailing ${series.days}-day window`}
+            </p>
+            <div className="titled">
+              <h2>
+                {running ? `${label} over time` : `${series.days}-day ${label}`}
+              </h2>
+              <Help label="How to read this chart">
+                <p>
+                  {running
+                    ? "Each line is a model's accuracy from the start of the record up to each date, so the lines settle as the days add up."
+                    : `Each point is a model's accuracy over the ${series.days} days ending on that date, so you can see which model was ahead at any time.`}
+                  {running &&
+                    (metric === "mae" || metric === "rmse") &&
+                    " The climb through 2022 is the energy crisis, when prices and their swings were several times their usual size."}
+                </p>
+                <p>Drag across the chart to zoom in.</p>
+                <MetricGlossary />
+              </Help>
+            </div>
           </div>
         </div>
-        <ChartSwitches {...props} />
+        <Legend series={series.series.map((s) => s.model)} />
+        <OverTimeChart series={series} zoom={zoom} onZoom={onZoom} />
+        <ZoomBar days={series.deliveryDates} zoom={zoom} onZoom={onZoom} />
       </div>
-      <p className="subtle tiles-caption">
-        {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
-      </p>
-      <HeadlineNumbers metric={metric} figures={figures} />
-      <Legend series={series.series.map((s) => s.model)} />
-      <OverTimeChart series={series} zoom={zoom} onZoom={onZoom} />
-      <ZoomBar days={series.deliveryDates} zoom={zoom} onZoom={onZoom} />
-    </>
+      <div className="view-side">
+        <ChartSwitches {...props} />
+        <p className="subtle tiles-caption">
+          {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
+        </p>
+        <HeadlineNumbers metric={metric} figures={figures} />
+      </div>
+    </div>
   );
 }
 
@@ -488,31 +497,35 @@ function ProfileView(props: ChartViewProps & { by: Profile }) {
   const { label } = METRIC_PRESENTATION[metric];
 
   return (
-    <>
-      <div className="panel-bar">
-        <div>
-          <p className="eyebrow">
-            {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
-          </p>
-          <div className="titled">
-            <h2>
-              {label} by {by === "weekday" ? "weekday" : "hour"}
-            </h2>
-            <Help label="How to read this chart">
-              <p>
-                {by === "weekday"
-                  ? "Each point is a model's accuracy on one day of the week. The naïve copies the day before, so it forecasts Mondays from a Sunday and Saturdays from a Friday."
-                  : "Each point is a model's accuracy at one hour of the day, period 1 being midnight to 1 a.m. Prices move less at night, so night hours are easier to forecast."}
-              </p>
-              <MetricGlossary />
-            </Help>
+    <div className="view">
+      <div className="view-main">
+        <div className="panel-bar">
+          <div>
+            <p className="eyebrow">
+              {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
+            </p>
+            <div className="titled">
+              <h2>
+                {label} by {by === "weekday" ? "weekday" : "hour"}
+              </h2>
+              <Help label="How to read this chart">
+                <p>
+                  {by === "weekday"
+                    ? "Each point is a model's accuracy on one day of the week. The naïve copies the day before, so it forecasts Mondays from a Sunday and Saturdays from a Friday."
+                    : "Each point is a model's accuracy at one hour of the day, period 1 being midnight to 1 a.m. Prices move less at night, so night hours are easier to forecast."}
+                </p>
+                <MetricGlossary />
+              </Help>
+            </div>
           </div>
         </div>
+        <Legend series={profile.series.map((s) => s.model)} />
+        <ProfileChart profile={profile} />
+      </div>
+      <div className="view-side">
         <ChartSwitches {...props} />
       </div>
-      <Legend series={profile.series.map((s) => s.model)} />
-      <ProfileChart profile={profile} />
-    </>
+    </div>
   );
 }
 
@@ -661,23 +674,48 @@ function PriceView({
     view === "day" && prices.deliveryDates.includes(date) ? date : undefined;
 
   return (
-    <>
-      <div className="panel-bar">
-        <div>
-          <p className="eyebrow">
-            {SCOPE_LABELS[history]} · {scopeRange(data, history)}
-          </p>
-          <div className="titled">
-            <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
-            <Help label="How to read the price chart">
-              <p>
-                {profile
-                  ? `What the price itself did at each ${view === "weekday" ? "weekday" : "hour"}, so you can see where it swings most. Each box holds the middle half of the prices, with a line at the median and a dot at the average. The whiskers stretch to hold the middle 80%.`
-                  : "What the price itself did, so you can tell whether a big miss came on a wild day. The line is the average price. The dark band holds the middle half of the prices and the light band the middle 80%."}
-              </p>
-            </Help>
+    <div className="view">
+      <div className="view-main">
+        <div className="panel-bar">
+          <div>
+            <p className="eyebrow">
+              {SCOPE_LABELS[history]} · {scopeRange(data, history)}
+            </p>
+            <div className="titled">
+              <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
+              <Help label="How to read the price chart">
+                <p>
+                  {profile
+                    ? `What the price itself did at each ${view === "weekday" ? "weekday" : "hour"}, so you can see where it swings most. Each box holds the middle half of the prices, with a line at the median and a dot at the average. The whiskers stretch to hold the middle 80%.`
+                    : "What the price itself did, so you can tell whether a big miss came on a wild day. The line is the average price. The dark band holds the middle half of the prices and the light band the middle 80%."}
+                </p>
+              </Help>
+            </div>
           </div>
         </div>
+        <PriceKey
+          box={profile}
+          extremes={profile && extremes}
+          day={marked && formatDay(marked)}
+        />
+        {!profile ? (
+          <>
+            <PriceOverTimeChart
+              prices={prices}
+              zoom={zoom}
+              onZoom={onZoom}
+              marked={marked}
+            />
+            <ZoomBar days={data.running.dates} zoom={zoom} onZoom={onZoom} />
+          </>
+        ) : (
+          <PriceProfileChart
+            prices={priceProfile(data, view, history)}
+            extremes={extremes}
+          />
+        )}
+      </div>
+      <div className="view-side">
         <div className="chart-switches">
           {profile && (
             <button
@@ -700,28 +738,7 @@ function PriceView({
           />
         </div>
       </div>
-      <PriceKey
-        box={profile}
-        extremes={profile && extremes}
-        day={marked && formatDay(marked)}
-      />
-      {!profile ? (
-        <>
-          <PriceOverTimeChart
-            prices={prices}
-            zoom={zoom}
-            onZoom={onZoom}
-            marked={marked}
-          />
-          <ZoomBar days={data.running.dates} zoom={zoom} onZoom={onZoom} />
-        </>
-      ) : (
-        <PriceProfileChart
-          prices={priceProfile(data, view, history)}
-          extremes={extremes}
-        />
-      )}
-    </>
+    </div>
   );
 }
 
@@ -734,7 +751,7 @@ function Logo() {
       viewBox="0 0 36 36"
       aria-hidden="true"
     >
-      <rect width="36" height="36" rx="9" fill="var(--ink)" />
+      <rect width="36" height="36" rx="7" fill="var(--ink)" />
       <path
         d="M7 24.5 12.5 19l4 3.5 6-9 6.5 5"
         fill="none"

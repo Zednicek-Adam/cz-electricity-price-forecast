@@ -1,6 +1,8 @@
 /**
- * The help popover (ADR-0020): a "?" button beside a title that opens, on
- * click, a short plain-language note on how to read what the title names.
+ * The help popover (ADR-0020): a "How to read" link beside a title that
+ * opens, on click, a short plain-language note on how to read what the title
+ * names. It is a button dressed as a link (ADR-0021), and its accessible name
+ * is the note's, so a screen reader hears what it explains.
  * Click rather than hover, so it works on a phone. It is non-modal: Escape
  * or a click outside closes it, and Escape returns focus to the button.
  *
@@ -93,7 +95,7 @@ export function Help({ label, children }: Props) {
         aria-controls={id}
         onClick={() => setOpen(!open)}
       >
-        ?
+        How to read
       </button>
       <div
         ref={panel}

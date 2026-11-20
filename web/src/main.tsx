@@ -3,6 +3,13 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App.tsx";
 import { loadDashboard } from "./dashboard.ts";
+// The page's two faces, self-hosted (ADR-0021): Big Shoulders for headlines
+// only, IBM Plex Sans Condensed for everything else.
+import "@fontsource/big-shoulders-display/800";
+import "@fontsource/ibm-plex-sans-condensed/400";
+import "@fontsource/ibm-plex-sans-condensed/400-italic";
+import "@fontsource/ibm-plex-sans-condensed/600";
+import "@fontsource/ibm-plex-sans-condensed/700";
 import "./styles.css";
 
 const root = document.getElementById("root");
