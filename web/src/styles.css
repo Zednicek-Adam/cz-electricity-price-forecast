@@ -327,18 +327,21 @@ a {
 }
 
 .intro-models dd,
-.intro-notes {
+.intro-lead,
+.intro-result {
   margin: 2px 0 0;
   color: var(--ink-2);
 }
 
-.intro-notes {
-  display: grid;
-  gap: 8px;
-  padding-left: 18px;
+.intro-lead {
+  margin: 0 0 10px;
 }
 
-.intro-notes strong {
+.intro-result {
+  margin-top: 12px;
+}
+
+.intro-result strong {
   color: var(--ink);
 }
 

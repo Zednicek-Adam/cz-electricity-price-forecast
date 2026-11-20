@@ -44,28 +44,28 @@ export const METRIC_PRESENTATION: Record<Metric, MetricPresentation> = {
     unit: "EUR/MWh",
     decimals: 1,
     plain:
-      "The average miss: how far a forecast landed from the real price, in EUR/MWh.",
+      "The average miss per hour, in EUR/MWh: how far a forecast landed from the real price.",
   },
   rmse: {
     label: "RMSE",
     unit: "EUR/MWh",
     decimals: 1,
     plain:
-      "Like MAE, but big misses count for more, so a few bad hours weigh heavily.",
+      "Also in EUR/MWh, but a large miss counts for more than several small ones.",
   },
   smape: {
     label: "SMAPE",
     unit: "",
     decimals: 1,
     plain:
-      "The miss as a share of the price, on a scale from 0 to 200. It jumps around when prices are close to zero.",
+      "The miss relative to the size of the price, from 0 to 200. It jumps around when prices are close to zero.",
   },
   rmae: {
     label: "rMAE",
     unit: "",
     decimals: 3,
     plain:
-      "The average miss divided by the naïve's. Under 1 beats copying yesterday's price, and 0.65 means misses about a third smaller.",
+      "A model's MAE divided by the naïve forecast's. Below 1 means the model beat \"each hour costs what it did yesterday\", and 0.65 means misses about a third smaller.",
   },
 };
 

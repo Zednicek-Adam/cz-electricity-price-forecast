@@ -1030,7 +1030,7 @@ describe("the introduction", () => {
       within(intro())
         .getAllByRole("term")
         .map((t) => t.textContent),
-    ).toEqual(["Chronos-2", "AR-168", "Naïve"]);
+    ).toEqual(["Chronos-2", "AR-168", "Naïve", "MAE", "RMSE", "SMAPE", "rMAE"]);
     expect(text).toContain("missed the real price by 16.6 EUR/MWh");
     expect(text).toContain("Copying yesterday's price missed by 26.1 EUR/MWh");
   });
@@ -1128,9 +1128,9 @@ describe("the help notes", () => {
     const note = openHelp("What the metrics mean", day);
     for (const words of [
       "The average miss",
-      "big misses count for more",
-      "on a scale from 0 to 200",
-      "divided by the naïve's",
+      "a large miss counts for more",
+      "from 0 to 200",
+      "divided by the naïve forecast's",
     ]) {
       expect(note.textContent).toContain(words);
     }

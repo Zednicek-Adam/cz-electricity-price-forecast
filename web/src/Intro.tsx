@@ -2,8 +2,9 @@
  * The introduction (ADR-0020): what forecasting a day-ahead price means, for
  * a reader who has never met the market, and how this page keeps score. It
  * explains the idea, not the project's build; that is the README's job. The
- * idea is a schema rather than prose, and the three models are named in
- * words beside it.
+ * idea is a schema rather than prose. Below it, the three models and the
+ * four metrics are named in words, the metrics in the same sentences as
+ * their hints.
  *
  * It folds to one bar, and the page remembers the fold, so a returning
  * reader meets the chart first. Its one figure is a published one, read
@@ -14,7 +15,12 @@ import { useState } from "react";
 import { accuracy, HEADLINE_MODEL } from "./dashboard.ts";
 import { IntroSchema } from "./IntroSchema.tsx";
 import { LineKey } from "./Legend.tsx";
-import { formatMetric, MODEL_LABELS } from "./presentation.ts";
+import {
+  formatMetric,
+  METRIC_PRESENTATION,
+  METRICS,
+  MODEL_LABELS,
+} from "./presentation.ts";
 import type { Dashboard, ModelSlug } from "./types.ts";
 
 export const INTRO_FOLDED_KEY = "cz-epf:intro-folded";
@@ -127,20 +133,21 @@ export function Intro({ data }: { data: Dashboard }) {
             </dl>
           </div>
           <div>
-            <h3>Good to know</h3>
-            <ul className="intro-notes">
-              <Result data={data} />
-              <li>
-                Prices are in euros per megawatt-hour (EUR/MWh). 100 EUR/MWh is
-                10 euro cents per kilowatt-hour, before network fees and taxes.
-              </li>
-              <li>
-                Start with the <strong>Day</strong> tab below, which opens on
-                the newest forecast. The other tabs show how accurate the models
-                have been over time, by weekday and by hour. The scoreboard at
-                the bottom adds it all up.
-              </li>
-            </ul>
+            <h3>How the forecasts are scored</h3>
+            <p className="intro-lead">
+              Once a day&apos;s real prices are in, each hour&apos;s forecast is
+              compared with its real price. The misses are summed up in four
+              ways, and in all four, lower is better.
+            </p>
+            <dl className="intro-models">
+              {METRICS.map((m) => (
+                <div key={m}>
+                  <dt>{METRIC_PRESENTATION[m].label}</dt>
+                  <dd>{METRIC_PRESENTATION[m].plain}</dd>
+                </div>
+              ))}
+            </dl>
+            <Result data={data} />
           </div>
         </div>
       </div>
@@ -156,11 +163,11 @@ function Result({ data }: { data: Dashboard }) {
   const naive = rows.find((r) => r.model === "daylag")?.mae;
   if (headline == null || naive == null) return null;
   return (
-    <li>
+    <p className="intro-result">
       So far, {MODEL_LABELS[HEADLINE_MODEL]}&apos;s forecasts have missed the
       real price by <strong>{formatMetric("mae", headline)} EUR/MWh</strong> per
       hour on average. Copying yesterday&apos;s price missed by{" "}
       <strong>{formatMetric("mae", naive)} EUR/MWh</strong>.
-    </li>
+    </p>
   );
 }

@@ -55,10 +55,10 @@ technology, and one visually hidden sentence says the same thing in words.
 Below the schema the introduction has two columns:
 
 - the three models in a sentence or two each, the naïve as the yardstick;
-- good to know: the headline model's whole-record MAE beside the naïve's,
-  both read from the accuracy table so the page computes nothing
-  (ADR-0016); what EUR/MWh means in cents per kilowatt-hour; and where on
-  the page to start.
+- how the forecasts are scored: the four metrics in the README's words,
+  the same sentences as the hints, and below them the headline model's
+  whole-record MAE beside the naïve's, both read from the accuracy table so
+  the page computes nothing (ADR-0016).
 
 **It folds**, and the page remembers the fold in `localStorage`, so a
 returning reader meets the chart first. Folded, it is one bar that opens it
@@ -104,6 +104,11 @@ forecast carries known prices on into the future, harder to see. A version with 
 all followed, and lost the titles that tell a newcomer which step is which.
 Scoring came back later as a step of its own, step 4, apart from the
 forecast it scores.
+
+**A "Good to know" column** in place of the metrics: the two MAEs, what
+EUR/MWh means in cents per kilowatt-hour, and where on the page to start.
+Built and replaced on review: a newcomer meets the four metrics on every
+chart, and the column did not say what they were.
 
 **The models as a row of cards**, each with a shorter description, its
 whole-record MAE as its average miss, and the lowest marked Best, with a
