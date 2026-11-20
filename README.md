@@ -89,6 +89,8 @@ The four metrics:
 - **SMAPE**, the miss relative to the size of the price, from 0 to 200.
 - **rMAE**, a model's MAE divided by the naïve forecast's. Below 1 means the
   model beat "each hour costs what it did yesterday".
+  - Not comparable to rMAE in published research or in the thesis, which
+    measure against a different naïve.
 
 [Reading the figures](docs/reading-the-figures.md) explains every number and
 chart in more detail.
