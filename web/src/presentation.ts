@@ -33,13 +33,40 @@ interface MetricPresentation {
   unit: string;
   /** Precision is part of the definition (ADR-0006). */
   decimals: number;
+  /** What the metric measures, for a reader who has never met it
+   * (ADR-0020). `docs/reading-the-figures.md` has the formulas. */
+  plain: string;
 }
 
 export const METRIC_PRESENTATION: Record<Metric, MetricPresentation> = {
-  mae: { label: "MAE", unit: "EUR/MWh", decimals: 1 },
-  rmse: { label: "RMSE", unit: "EUR/MWh", decimals: 1 },
-  smape: { label: "SMAPE", unit: "", decimals: 1 },
-  rmae: { label: "rMAE", unit: "", decimals: 3 },
+  mae: {
+    label: "MAE",
+    unit: "EUR/MWh",
+    decimals: 1,
+    plain:
+      "The average miss: how far a forecast landed from the real price, in EUR/MWh.",
+  },
+  rmse: {
+    label: "RMSE",
+    unit: "EUR/MWh",
+    decimals: 1,
+    plain:
+      "Like MAE, but big misses count for more, so a few bad hours weigh heavily.",
+  },
+  smape: {
+    label: "SMAPE",
+    unit: "",
+    decimals: 1,
+    plain:
+      "The miss as a share of the price, on a scale from 0 to 200. It jumps around when prices are close to zero.",
+  },
+  rmae: {
+    label: "rMAE",
+    unit: "",
+    decimals: 3,
+    plain:
+      "The average miss divided by the naïve's. Under 1 beats copying yesterday's price, and 0.65 means misses about a third smaller.",
+  },
 };
 
 /** A metric figure to its fixed precision; an unpublished one as a dash. */

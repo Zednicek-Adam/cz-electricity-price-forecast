@@ -15,6 +15,11 @@ status: accepted
 > **Amended by [ADR-0018](0018-the-hero-chart-gains-a-weekday-and-an-hour-profile.md).**
 > Per-hour accuracy arrives, as the hero chart's By hour view, beside a By
 > weekday view.
+>
+> **Amended by [ADR-0020](0020-an-introduction-and-plain-language-hints.md).**
+> The no-prose rule goes: an introduction opens the page, and a "?" beside
+> each chart's title opens a plain-language hint. No disclaimer and no
+> banner, still.
 
 The scoreboard leads with a **triple** — the headline model's MAE, the day-lag
 naïve's MAE, and the rMAE ratio between them — scoped to the whole replay,

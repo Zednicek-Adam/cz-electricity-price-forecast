@@ -24,6 +24,11 @@
   --price-outer: rgba(17, 17, 16, 0.07);
   --price-inner: rgba(17, 17, 16, 0.16);
   --price-box: #e4e2db;
+  /* The introduction schema's next day: empty, then forecast. */
+  --schema-empty: rgba(17, 17, 16, 0.03);
+  --schema-next: rgba(42, 120, 214, 0.08);
+  /* The introduction schema's error: a red no model and no status uses. */
+  --schema-error: #e0708a;
   --warning: #b8541a;
   --radius: 14px;
   font-family:
@@ -156,6 +161,269 @@ a {
   border-radius: 8px;
   background: #fdf3ec;
   color: var(--ink);
+}
+
+/* ---------- Introduction and hints (ADR-0020) ---------- */
+
+/* Doubled class: .card, later in the file, sets the padding too. */
+.card.intro {
+  padding: 22px 24px 24px;
+}
+
+.card.intro-folded {
+  padding: 0 16px 0 20px;
+}
+
+.intro-folded .fold-bar {
+  width: 100%;
+}
+
+.intro-folded .fold-summary {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.intro-mark {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.intro-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.intro-body {
+  display: grid;
+  gap: 20px;
+}
+
+/* The schema: four drawings joined by arrows, each titled. The three price
+   drawings share a width; the models' box keeps a narrower fixed one. */
+.schema {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) auto 150px auto minmax(0, 1fr) auto
+    minmax(0, 1fr);
+  align-items: start;
+  gap: 0 6px;
+  margin: 4px 0 6px;
+}
+
+.schema-step {
+  margin: 0;
+  min-width: 0;
+}
+
+.schema-step figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 22px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.schema-number {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 11px;
+}
+
+.schema-art {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 156px;
+  box-sizing: border-box;
+  padding: 8px 4px;
+}
+
+.schema-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+.schema-models ul {
+  display: grid;
+  gap: 10px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  font-weight: 600;
+}
+
+.schema-models li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+}
+
+/* Level with the drawings, below the titles' 22px and 8px gap. */
+.schema-arrow {
+  display: grid;
+  place-items: center;
+  height: 156px;
+  margin-top: 30px;
+}
+
+.schema-arrow span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--ink-2);
+  box-shadow: var(--shadow);
+}
+
+.intro-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.intro-columns h3 {
+  margin-bottom: 8px;
+}
+
+.intro-models {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.intro-models dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.intro-models dd,
+.intro-notes {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+}
+
+.intro-notes {
+  display: grid;
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.intro-notes strong {
+  color: var(--ink);
+}
+
+/* A title with its "?" beside it. */
+.titled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help {
+  position: relative;
+  display: inline-flex;
+}
+
+.help-button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: var(--border-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.help-button:hover:not(:disabled),
+.help-button[aria-expanded="true"] {
+  color: var(--surface);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/* How to read a view, in plain words, opened from its "?". */
+/* Placed against the viewport by Help.tsx, since the hero cards clip. */
+.help-panel {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow:
+    var(--shadow),
+    0 12px 32px -12px rgba(17, 17, 16, 0.22);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-transform: none;
+}
+
+.help-panel[hidden] {
+  display: none;
+}
+
+.metric-glossary {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.metric-glossary dt {
+  display: inline;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.metric-glossary dt::after {
+  content: " · ";
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.metric-glossary dd {
+  display: inline;
+  margin: 0;
 }
 
 /* ---------- Cards and sections ---------- */
@@ -963,5 +1231,30 @@ footer p {
   }
   .tile dd {
     font-size: 20px;
+  }
+  .schema {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .schema-art {
+    height: auto;
+  }
+  /* Stacked, a drawing takes the full width; capped so it stays a sketch. */
+  .schema-chart {
+    max-height: 170px;
+    margin: 0 auto;
+  }
+  .schema-arrow {
+    height: 32px;
+    margin: 4px 0 8px;
+  }
+  .schema-arrow svg {
+    transform: rotate(90deg);
+  }
+  .intro-columns {
+    grid-template-columns: 1fr;
+  }
+  .card.intro-folded {
+    padding: 0 12px;
   }
 }

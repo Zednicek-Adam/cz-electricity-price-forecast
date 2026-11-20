@@ -19,6 +19,7 @@ import { LinePath } from "@visx/shape";
 
 import { EndMarker, TICK_LABEL } from "./ChartParts.tsx";
 import { spreadLabels } from "./charts.ts";
+import { Help } from "./Help.tsx";
 import { Legend } from "./Legend.tsx";
 import { MODEL_LABELS, SERIES_COLOURS, SERIES_DASH } from "./presentation.ts";
 import { Segmented } from "./Segmented.tsx";
@@ -50,7 +51,19 @@ export function ComparisonCard({ comparison, models, onModel }: Props) {
     <>
       <div className="card-bar">
         <div>
-          <h3>Diebold–Mariano test by period</h3>
+          <div className="titled">
+            <h3>Diebold–Mariano test by period</h3>
+            <Help label="How to read the Diebold–Mariano test">
+              <p>
+                Is a gap between two models real, or luck? For each hour of the
+                day, this statistical test compares {MODEL_LABELS[model]}&apos;s
+                misses with each other model&apos;s. Below the grey band,{" "}
+                {MODEL_LABELS[model]} was reliably more accurate at that hour.
+                Above it, the other model was. Inside it, the gap could be
+                chance.
+              </p>
+            </Help>
+          </div>
           <p className="subtle">
             {MODEL_LABELS[model]} against each other model, period ordinals 1 to
             24

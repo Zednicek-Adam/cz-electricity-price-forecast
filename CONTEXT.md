@@ -355,3 +355,17 @@ separate choices.
 **Scope switch** — the one control choosing between the **whole record** and the
 **window** for the accuracy table and the Diebold–Mariano card together, so the
 two always cover the same days.
+
+**Introduction** — the foldable card above the hero chart that explains, for a
+reader who has never met the market, what forecasting a day-ahead price means
+and how the page keeps score. Its idea is a schema of four titled drawings:
+the known prices with the next day empty, the models, the same frame with the
+next day forecast, and that day up close against its real prices. It explains the idea, not the build, and it is not a
+disclaimer. The page remembers its fold (ADR-0020).
+_Avoid_: about page, banner, onboarding
+
+**Hint** — the plain-language note behind the "?" beside a chart's or a
+card's title, saying what it shows and which way is good, and where a metric
+can be chosen, what each metric measures. It opens on a click. It describes;
+the formulas stay in this file (ADR-0020).
+_Avoid_: caption (that labels data), tooltip, caveat
