@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" width="960" height="380" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect width="960" height="380" rx="12" fill="#f5f4f1"/>
+  <!-- the delivery day being forecast -->
+  <rect x="624" y="36" width="300" height="234" rx="10" fill="#e3edfa"/>
+
+  <!-- day labels -->
+  <g font-size="19" font-weight="700" fill="#1a1a1a" text-anchor="middle">
+    <text x="180" y="72">Monday</text>
+    <text x="480" y="72">Tuesday</text>
+    <text x="774" y="72">Wednesday</text>
+  </g>
+
+  <!-- time axis and midnights -->
+  <line x1="36" y1="190" x2="924" y2="190" stroke="#9a978f" stroke-width="2"/>
+  <g stroke="#c9c6bf" stroke-width="1.5" stroke-dasharray="4 5">
+    <line x1="330" y1="90" x2="330" y2="270"/>
+    <line x1="624" y1="90" x2="624" y2="270"/>
+  </g>
+
+  <!-- auctions: above the axis -->
+  <g font-size="15" fill="#1a1a1a" text-anchor="middle">
+    <line x1="180" y1="190" x2="180" y2="158" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="180" cy="190" r="13" fill="#1a1a1a"/>
+    <text x="180" y="195.5" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+    <text x="180" y="128">Noon: the auction sets</text>
+    <text x="180" y="148">Tuesday's prices</text>
+
+    <line x1="480" y1="190" x2="480" y2="158" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="480" cy="190" r="13" fill="#1a1a1a"/>
+    <text x="480" y="195.5" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+    <text x="480" y="128">Noon: the auction sets</text>
+    <text x="480" y="148">Wednesday's prices</text>
+
+    <text x="774" y="128">The delivery day,</text>
+    <text x="774" y="148">the one being forecast</text>
+  </g>
+
+  <!-- daily runs: below the axis -->
+  <g font-size="15" text-anchor="middle">
+    <line x1="232" y1="190" x2="232" y2="222" stroke="#2f7bd8" stroke-width="1.5"/>
+    <circle cx="232" cy="190" r="13" fill="#2f7bd8"/>
+    <text x="232" y="195.5" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+    <text x="232" y="242" fill="#2f7bd8" font-weight="700">Afternoon: the models</text>
+    <text x="232" y="262" fill="#2f7bd8" font-weight="700">forecast Wednesday</text>
+
+    <line x1="520" y1="190" x2="520" y2="222" stroke="#1a1a1a" stroke-width="1.5"/>
+    <circle cx="520" cy="190" r="13" fill="#1a1a1a"/>
+    <text x="520" y="195.5" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+    <text x="520" y="242" fill="#1a1a1a">Afternoon: the forecast is</text>
+    <text x="520" y="262" fill="#1a1a1a">scored against the real price</text>
+  </g>
+
+  <!-- two days ahead -->
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#2f7bd8"/>
+    </marker>
+  </defs>
+  <path d="M232 274 C 300 350, 720 350, 774 280" fill="none" stroke="#2f7bd8" stroke-width="2.5" marker-end="url(#head)"/>
+  <text x="512" y="362" font-size="15" fill="#2f7bd8" text-anchor="middle" font-style="italic">made two days before delivery, before any of Wednesday's prices exist</text>
+</svg>
