@@ -55,10 +55,10 @@ technology, and one visually hidden sentence says the same thing in words.
 Below the schema the introduction has two columns:
 
 - the three models in a sentence or two each, the naïve as the yardstick;
-- how the forecasts are scored: the four metrics in the README's words,
-  the same sentences as the hints, and below them the headline model's
-  whole-record MAE beside the naïve's, both read from the accuracy table so
-  the page computes nothing (ADR-0016).
+- how the forecasts are scored: a one-line key to the symbols, then each
+  of the four metrics as its formula and one short line on what it means,
+  laid out two by two, with no boxes, and in one column on a narrow phone.
+  It carries no figure from the record; the charts below it do.
 
 **It folds**, and the page remembers the fold in `localStorage`, so a
 returning reader meets the chart first. Folded, it is one bar that opens it
@@ -70,7 +70,8 @@ opens on a click, not a hover, so it works on a phone, and Escape or a click
 outside closes it. The Day view's hint differs for a scored day and the
 pending one. The hints of the charts with a metric switch, the day's
 accuracy panel and the accuracy table say what each of the four metrics
-measures. The Diebold–Mariano card's says what the test asks and how to read
+measures, in the README's words and with no formula: a note opened
+mid-chart is for a reminder, and the formulas are the introduction's. The Diebold–Mariano card's says what the test asks and how to read
 the band. The note is placed against the viewport, not its card, because
 the hero cards clip what overflows them.
 
@@ -81,9 +82,19 @@ the hero cards clip what overflows them.
   README's and `docs/reading-the-figures.md`'s to explain, not a first-time
   reader's to learn.
 - **`CONTEXT.md` and `docs/reading-the-figures.md` stay the definitions.**
-  The hints describe the metrics in words and carry no formula, so there is
-  no second copy of a formula to drift. The plain sentences live in
-  `presentation.ts`, once, beside each metric's label and precision.
+  The introduction shows each metric's formula, because the formulas side by side
+  show the differences at a glance: the bars of MAE, the square and root of
+  RMSE, the fraction of SMAPE, the ratio of rMAE. They are a restatement
+  for a general reader, as ADR-0006 allows: written with words for the
+  variables, "error" for `CONTEXT.md`'s e, real price minus forecast, and
+  "real" and "forecast" where SMAPE needs them apart, each in step 4's
+  colour (error red, real black, forecast blue) here and in the key line
+  above them, and each
+  average as one sum over the number of hours rather than 1/n, drawn in
+  MathML so the page needs no maths library, and kept once, in
+  `MetricFormula.tsx`. Where they and `CONTEXT.md` disagree, the page is
+  wrong. SMAPE's rule for a zero price and rMAE's undefined case stay in
+  `docs/reading-the-figures.md`.
 - **rMAE still renders bare.** Its hint says what the ratio means; the
   non-comparability with published work stays in the README.
 
@@ -104,6 +115,15 @@ forecast carries known prices on into the future, harder to see. A version with 
 all followed, and lost the titles that tell a newcomer which step is which.
 Scoring came back later as a step of its own, step 4, apart from the
 forecast it scores.
+
+**The formulas in words**, such as "average of |real − forecast|".
+Built and replaced on review: written out, the four read alike, and the
+point of a formula here is to show how they differ.
+
+**The headline model's whole-record MAE beside the naïve's** under the
+metrics, read from the accuracy table. Built and taken out on review: the
+introduction explains how scoring works, and the record's numbers are the
+charts' to show.
 
 **A "Good to know" column** in place of the metrics: the two MAEs, what
 EUR/MWh means in cents per kilowatt-hour, and where on the page to start.

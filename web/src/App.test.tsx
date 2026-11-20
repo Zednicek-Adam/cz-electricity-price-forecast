@@ -1021,7 +1021,7 @@ describe("the introduction", () => {
     });
   }
 
-  test("explains the idea, with the whole record's published MAEs", () => {
+  test("explains the idea, the models and the metrics", () => {
     render(<App data={DASHBOARD} />);
 
     const text = intro().textContent ?? "";
@@ -1031,8 +1031,12 @@ describe("the introduction", () => {
         .getAllByRole("term")
         .map((t) => t.textContent),
     ).toEqual(["Chronos-2", "AR-168", "Naïve", "MAE", "RMSE", "SMAPE", "rMAE"]);
-    expect(text).toContain("missed the real price by 16.6 EUR/MWh");
-    expect(text).toContain("Copying yesterday's price missed by 26.1 EUR/MWh");
+    expect(text).not.toContain("EUR/MWh and the naïve's");
+    expect(
+      [...intro().querySelectorAll("math")].map((m) =>
+        m.getAttribute("data-metric"),
+      ),
+    ).toEqual(["mae", "rmse", "smape", "rmae"]);
   });
 
   test("folds to one bar, and stays folded on the next visit", () => {
@@ -1121,15 +1125,16 @@ describe("the help notes", () => {
     );
   });
 
-  test("say in plain words what every metric measures", async () => {
+  test("say in the README's words what every metric measures", async () => {
     await openDay();
     const day = screen.getByRole("region", { name: "Day accuracy" });
 
     const note = openHelp("What the metrics mean", day);
+    expect(note.querySelectorAll("math")).toHaveLength(0);
     for (const words of [
-      "The average miss",
-      "a large miss counts for more",
-      "from 0 to 200",
+      "The average miss per hour, in EUR/MWh.",
+      "a large miss counts for more than several small ones",
+      "relative to the size of the price, from 0 to 200",
       "divided by the naïve forecast's",
     ]) {
       expect(note.textContent).toContain(words);

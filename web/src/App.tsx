@@ -152,7 +152,7 @@ export function App({ data }: { data: Dashboard }) {
         </p>
       )}
       <main>
-        <Intro data={data} />
+        <Intro />
         <section className="card hero" aria-label="Hero chart">
           <ViewTabs
             id="hero"

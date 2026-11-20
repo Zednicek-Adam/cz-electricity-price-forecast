@@ -3,25 +3,19 @@
  * a reader who has never met the market, and how this page keeps score. It
  * explains the idea, not the project's build; that is the README's job. The
  * idea is a schema rather than prose. Below it, the three models and the
- * four metrics are named in words, the metrics in the same sentences as
- * their hints.
+ * four metrics are named, each with its formula. It carries no figure from
+ * the record: the charts below are where the models' accuracy is read.
  *
  * It folds to one bar, and the page remembers the fold, so a returning
- * reader meets the chart first. Its one figure is a published one, read
- * from the accuracy table, never computed here (ADR-0016).
+ * reader meets the chart first.
  */
 import { useState } from "react";
 
-import { accuracy, HEADLINE_MODEL } from "./dashboard.ts";
+import { MetricList } from "./Help.tsx";
 import { IntroSchema } from "./IntroSchema.tsx";
 import { LineKey } from "./Legend.tsx";
-import {
-  formatMetric,
-  METRIC_PRESENTATION,
-  METRICS,
-  MODEL_LABELS,
-} from "./presentation.ts";
-import type { Dashboard, ModelSlug } from "./types.ts";
+import { MODEL_LABELS } from "./presentation.ts";
+import type { ModelSlug } from "./types.ts";
 
 export const INTRO_FOLDED_KEY = "cz-epf:intro-folded";
 
@@ -62,7 +56,7 @@ const MODELS: { model: ModelSlug; about: string }[] = [
   },
 ];
 
-export function Intro({ data }: { data: Dashboard }) {
+export function Intro() {
   const [folded, setFolded] = useState(readFolded);
 
   function fold(next: boolean): void {
@@ -134,40 +128,10 @@ export function Intro({ data }: { data: Dashboard }) {
           </div>
           <div>
             <h3>How the forecasts are scored</h3>
-            <p className="intro-lead">
-              Once a day&apos;s real prices are in, each hour&apos;s forecast is
-              compared with its real price. The misses are summed up in four
-              ways, and in all four, lower is better.
-            </p>
-            <dl className="intro-models">
-              {METRICS.map((m) => (
-                <div key={m}>
-                  <dt>{METRIC_PRESENTATION[m].label}</dt>
-                  <dd>{METRIC_PRESENTATION[m].plain}</dd>
-                </div>
-              ))}
-            </dl>
-            <Result data={data} />
+            <MetricList className="intro-metrics" />
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-/** The headline model's average miss against the naïve's, over the whole
- * record, as the accuracy table publishes them. */
-function Result({ data }: { data: Dashboard }) {
-  const rows = accuracy(data, "whole");
-  const headline = rows.find((r) => r.model === HEADLINE_MODEL)?.mae;
-  const naive = rows.find((r) => r.model === "daylag")?.mae;
-  if (headline == null || naive == null) return null;
-  return (
-    <p className="intro-result">
-      So far, {MODEL_LABELS[HEADLINE_MODEL]}&apos;s forecasts have missed the
-      real price by <strong>{formatMetric("mae", headline)} EUR/MWh</strong> per
-      hour on average. Copying yesterday&apos;s price missed by{" "}
-      <strong>{formatMetric("mae", naive)} EUR/MWh</strong>.
-    </p>
   );
 }

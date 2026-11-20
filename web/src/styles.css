@@ -319,6 +319,30 @@ a {
   margin: 0;
 }
 
+/* The four metrics, two by two, with no boxes of their own: the same plain
+   rows as the models beside them. One column on a narrow phone. */
+.intro-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+
+.intro-metrics dt {
+  font-weight: 600;
+}
+
+.intro-metrics dd {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+}
+
+@media (max-width: 460px) {
+  .intro-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
 .intro-models dt {
   display: flex;
   align-items: center;
@@ -327,22 +351,51 @@ a {
 }
 
 .intro-models dd,
-.intro-lead,
-.intro-result {
+.formula-key {
   margin: 2px 0 0;
   color: var(--ink-2);
 }
 
-.intro-lead {
+.formula-key {
   margin: 0 0 10px;
 }
 
-.intro-result {
-  margin-top: 12px;
+/* The formulas' words in step 4's colours, so error, real and forecast
+   read as the red segment, the black dot and the blue ring. */
+.term-real,
+.term-forecast,
+.term-error {
+  font-weight: 600;
 }
 
-.intro-result strong {
+.term-real {
+  color: var(--series-observed);
+}
+
+.term-forecast {
+  color: var(--accent);
+}
+
+.term-error {
+  color: var(--schema-error);
+}
+
+/* A metric's formula, centred on its own line above what it means: inline
+   math drawn at full size in a centred block. No overflow clip, since the
+   radical and subscripts reach past the box and would raise scrollbars;
+   the widest formula, SMAPE's, fits a phone's column. */
+.formula {
+  margin: 6px 0;
   color: var(--ink);
+  font-size: 1.05em;
+  text-align: center;
+}
+
+/* Fractions keep their parts at full size, so SMAPE's fraction inside a
+   fraction stays readable. */
+.formula math,
+.formula mfrac > * {
+  math-style: normal;
 }
 
 /* A title with its "?" beside it. */

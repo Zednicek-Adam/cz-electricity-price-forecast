@@ -33,9 +33,12 @@ interface MetricPresentation {
   unit: string;
   /** Precision is part of the definition (ADR-0006). */
   decimals: number;
-  /** What the metric measures, for a reader who has never met it
-   * (ADR-0020). `docs/reading-the-figures.md` has the formulas. */
+  /** What the metric means, read beside its formula in the introduction
+   * (MetricFormula.tsx, ADR-0020). */
   plain: string;
+  /** The metric in the README's words, for the metric hints, which carry
+   * no formula (ADR-0020). */
+  described: string;
 }
 
 export const METRIC_PRESENTATION: Record<Metric, MetricPresentation> = {
@@ -43,29 +46,33 @@ export const METRIC_PRESENTATION: Record<Metric, MetricPresentation> = {
     label: "MAE",
     unit: "EUR/MWh",
     decimals: 1,
-    plain:
-      "The average miss per hour, in EUR/MWh: how far a forecast landed from the real price.",
+    plain: "The typical miss per hour, in EUR/MWh.",
+    described: "The average miss per hour, in EUR/MWh.",
   },
   rmse: {
     label: "RMSE",
     unit: "EUR/MWh",
     decimals: 1,
     plain:
+      "In EUR/MWh too. Squaring makes a large miss count for more than several small ones.",
+    described:
       "Also in EUR/MWh, but a large miss counts for more than several small ones.",
   },
   smape: {
     label: "SMAPE",
     unit: "",
     decimals: 1,
-    plain:
-      "The miss relative to the size of the price, from 0 to 200. It jumps around when prices are close to zero.",
+    plain: "The miss as a share of the price, from 0 to 200.",
+    described: "The miss relative to the size of the price, from 0 to 200.",
   },
   rmae: {
     label: "rMAE",
     unit: "",
     decimals: 3,
     plain:
-      "A model's MAE divided by the naïve forecast's. Below 1 means the model beat \"each hour costs what it did yesterday\", and 0.65 means misses about a third smaller.",
+      "Below 1, the model beats the naïve, which gives each hour the price of the same hour the day before.",
+    described:
+      "A model's MAE divided by the naïve forecast's. Below 1 means the model beat “each hour costs what it did yesterday”.",
   },
 };
 

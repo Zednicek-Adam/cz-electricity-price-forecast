@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { MetricFormula } from "./MetricFormula.tsx";
 import { METRIC_PRESENTATION, METRICS } from "./presentation.ts";
 
 /** The gap between the note and the button, and the note and the screen. */
@@ -109,7 +110,33 @@ export function Help({ label, children }: Props) {
   );
 }
 
-/** What each metric measures, in words; the formulas stay in CONTEXT.md. */
+/** The introduction's four metrics, each with its formula and what it
+ * means, after a key to the formulas. */
+export function MetricList({ className }: { className: string }) {
+  return (
+    <>
+      <p className="formula-key">
+        For each hour, the <span className="term-error">error</span> is the{" "}
+        <span className="term-real">real</span> price minus the{" "}
+        <span className="term-forecast">forecast</span>. ∑ adds up every hour.
+        Lower is better in all four.
+      </p>
+      <dl className={className}>
+        {METRICS.map((m) => (
+          <div key={m}>
+            <dt>{METRIC_PRESENTATION[m].label}</dt>
+            <dd>
+              <MetricFormula metric={m} />
+              {METRIC_PRESENTATION[m].plain}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  );
+}
+
+/** The metric hint: the four metrics in the README's words, no formulas. */
 export function MetricGlossary() {
   return (
     <>
@@ -118,7 +145,7 @@ export function MetricGlossary() {
         {METRICS.map((m) => (
           <div key={m}>
             <dt>{METRIC_PRESENTATION[m].label}</dt>
-            <dd>{METRIC_PRESENTATION[m].plain}</dd>
+            <dd>{METRIC_PRESENTATION[m].described}</dd>
           </div>
         ))}
       </dl>

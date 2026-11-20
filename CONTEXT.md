@@ -366,6 +366,7 @@ _Avoid_: about page, banner, onboarding
 
 **Hint** — the plain-language note behind the "?" beside a chart's or a
 card's title, saying what it shows and which way is good, and where a metric
-can be chosen, what each metric measures. It opens on a click. It describes;
-the formulas stay in this file (ADR-0020).
+can be chosen, what each metric measures in the README's words. It opens on
+a click and carries no formula; the introduction's formulas restate this
+file's, which stays the definition (ADR-0020).
 _Avoid_: caption (that labels data), tooltip, caveat
