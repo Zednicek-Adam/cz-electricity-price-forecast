@@ -7,6 +7,10 @@ This page is a plain-language reading of [`CONTEXT.md`](../CONTEXT.md), which
 is the definition of record for every term and formula here. If the two ever
 disagree, `CONTEXT.md` is right and this page is wrong.
 
+The dashboard itself opens with a short introduction to price forecasting,
+and a "?" beside each chart's title opens a note on how to read it. Those are the short version,
+for a reader new to the field. This page is the long one.
+
 ## What the record is
 
 Every delivery day from 2020-01-01 to the newest, for every model, with

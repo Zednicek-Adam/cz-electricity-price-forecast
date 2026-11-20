@@ -25,10 +25,11 @@
  *   scope switch: the whole record or the last 30 days.
  *
  * The page holds the state the controls share and selects what each view
- * draws out of the one file it was handed. There is no explanatory prose: the
- * record says what it is. The two exceptions are claims the record cannot make
- * by itself: the pending day has no price yet, and a daily run that has
- * stopped (ADR-0012).
+ * draws out of the one file it was handed. Above the charts sits the
+ * introduction, and beside each title a "?" opens a note that says in plain
+ * words how to read it (ADR-0020): the page is written for a reader who has never
+ * forecast a price. The pending day and a daily run that has stopped are
+ * still the only claims the record cannot make by itself (ADR-0012).
  */
 import { useRef, useState, type KeyboardEvent } from "react";
 
@@ -49,6 +50,8 @@ import { DayChart } from "./DayChart.tsx";
 import { DateStepper, DayJumps } from "./DayNavigator.tsx";
 import { Footer } from "./Footer.tsx";
 import { HeadlineNumbers } from "./HeadlineNumbers.tsx";
+import { Help, MetricGlossary } from "./Help.tsx";
+import { Intro } from "./Intro.tsx";
 import { Legend } from "./Legend.tsx";
 import { MetricSelector } from "./MetricSelector.tsx";
 import { OverTimeChart } from "./OverTimeChart.tsx";
@@ -126,7 +129,8 @@ export function App({ data }: { data: Dashboard }) {
           <div>
             <h1>CZ day-ahead price forecast</h1>
             <p className="subtle">
-              Czech bidding zone · EUR/MWh · {record.first} – {record.last}
+              Daily forecasts of Czech electricity prices, scored against the
+              real ones · {record.first} – {record.last}
             </p>
           </div>
         </div>
@@ -148,6 +152,7 @@ export function App({ data }: { data: Dashboard }) {
         </p>
       )}
       <main>
+        <Intro />
         <section className="card hero" aria-label="Hero chart">
           <ViewTabs
             id="hero"
@@ -209,7 +214,20 @@ export function App({ data }: { data: Dashboard }) {
         <section className="scoreboard" aria-labelledby="scoreboard-title">
           <div className="section-bar">
             <div>
-              <h2 id="scoreboard-title">Scoreboard</h2>
+              <div className="titled">
+                <h2 id="scoreboard-title">Scoreboard</h2>
+                <Help label="How to read the scoreboard">
+                  <p>
+                    How every model has done over{" "}
+                    {scope === "whole"
+                      ? "the whole record"
+                      : "the last 30 days"}
+                    . Each figure measures how far the forecasts landed from the
+                    real price, so lower is better. The best figure in each
+                    column is in bold.
+                  </p>
+                </Help>
+              </div>
               <p className="subtle">
                 {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
               </p>
@@ -224,7 +242,12 @@ export function App({ data }: { data: Dashboard }) {
           </div>
           <div className="card" role="region" aria-label="Accuracy">
             <div className="card-bar">
-              <h3>Accuracy</h3>
+              <div className="titled">
+                <h3>Accuracy</h3>
+                <Help label="What the metrics mean">
+                  <MetricGlossary />
+                </Help>
+              </div>
             </div>
             <AccuracyTable rows={accuracy(data, scope)} scope={scope} />
           </div>
@@ -319,7 +342,17 @@ function DayView({ data, date, metric, onMetric, onPick }: DayViewProps) {
           <p className="eyebrow">
             {unpublished ? "Delivery day · forecast" : "Delivery day"}
           </p>
-          <h2>{formatDay(date)}</h2>
+          <div className="titled">
+            <h2>{formatDay(date)}</h2>
+            <Help label="How to read the day chart">
+              <p>
+                {unpublished
+                  ? "This day's prices are not set yet. The lines are the three models' forecasts for each hour. Once the auction publishes the real prices, the next update draws them in black and scores each model."
+                  : "The black line is the price the market set for each hour of this day. The coloured lines are the models' forecasts, each made from prices up to the day before. The closer a line follows the black one, the better the forecast."}
+              </p>
+              <p>Period 1 is midnight to 1 a.m., Prague time.</p>
+            </Help>
+          </div>
         </div>
         <DateStepper record={data.record} day={date} onPick={onPick} />
       </div>
@@ -332,7 +365,12 @@ function DayView({ data, date, metric, onMetric, onPick }: DayViewProps) {
       <DayChart day={day} />
       <div className="scoring" role="region" aria-label="Day accuracy">
         <div className="scoring-bar">
-          <h3>Accuracy on this day</h3>
+          <div className="titled">
+            <h3>Accuracy on this day</h3>
+            <Help label="What the metrics mean">
+              <MetricGlossary />
+            </Help>
+          </div>
           <MetricSelector metric={metric} onChange={onMetric} size="small" />
         </div>
         {unpublished ? (
@@ -347,7 +385,7 @@ function DayView({ data, date, metric, onMetric, onPick }: DayViewProps) {
             <div className="ribbon-bar">
               <p className="subtle">
                 {MODEL_LABELS[daily.model]} · daily {label} on every scored day
-                · click to open a day
+                · a taller spike is a worse day · click to open a day
               </p>
               <DayJumps daily={daily} onPick={onPick} />
             </div>
@@ -413,9 +451,23 @@ function TrendView(
               ? "Running metric · from the first scored day"
               : `Trailing ${series.days}-day window`}
           </p>
-          <h2>
-            {running ? `${label} over time` : `${series.days}-day ${label}`}
-          </h2>
+          <div className="titled">
+            <h2>
+              {running ? `${label} over time` : `${series.days}-day ${label}`}
+            </h2>
+            <Help label="How to read this chart">
+              <p>
+                {running
+                  ? "Each line is a model's accuracy from the start of the record up to each date, so the lines settle as the days add up."
+                  : `Each point is a model's accuracy over the ${series.days} days ending on that date, so you can see which model was ahead at any time.`}
+                {running &&
+                  (metric === "mae" || metric === "rmse") &&
+                  " The climb through 2022 is the energy crisis, when prices and their swings were several times their usual size."}
+              </p>
+              <p>Drag across the chart to zoom in.</p>
+              <MetricGlossary />
+            </Help>
+          </div>
         </div>
         <ChartSwitches {...props} />
       </div>
@@ -442,9 +494,19 @@ function ProfileView(props: ChartViewProps & { by: Profile }) {
           <p className="eyebrow">
             {SCOPE_LABELS[scope]} · {scopeRange(data, scope)}
           </p>
-          <h2>
-            {label} by {by === "weekday" ? "weekday" : "hour"}
-          </h2>
+          <div className="titled">
+            <h2>
+              {label} by {by === "weekday" ? "weekday" : "hour"}
+            </h2>
+            <Help label="How to read this chart">
+              <p>
+                {by === "weekday"
+                  ? "Each point is a model's accuracy on one day of the week. The naïve copies the day before, so it forecasts Mondays from a Sunday and Saturdays from a Friday."
+                  : "Each point is a model's accuracy at one hour of the day, period 1 being midnight to 1 a.m. Prices move less at night, so night hours are easier to forecast."}
+              </p>
+              <MetricGlossary />
+            </Help>
+          </div>
         </div>
         <ChartSwitches {...props} />
       </div>
@@ -605,7 +667,16 @@ function PriceView({
           <p className="eyebrow">
             {SCOPE_LABELS[history]} · {scopeRange(data, history)}
           </p>
-          <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
+          <div className="titled">
+            <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
+            <Help label="How to read the price chart">
+              <p>
+                {profile
+                  ? `What the price itself did at each ${view === "weekday" ? "weekday" : "hour"}, so you can see where it swings most. Each box holds the middle half of the prices, with a line at the median and a dot at the average. The whiskers stretch to hold the middle 80%.`
+                  : "What the price itself did, so you can tell whether a big miss came on a wild day. The line is the average price. The dark band holds the middle half of the prices and the light band the middle 80%."}
+              </p>
+            </Help>
+          </div>
         </div>
         <div className="chart-switches">
           {profile && (

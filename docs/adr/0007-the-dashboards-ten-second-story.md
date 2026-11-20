@@ -16,6 +16,10 @@ status: accepted
 > **Amended by [ADR-0019](0019-a-price-chart-below-the-hero-chart.md).** A
 > price chart sits below the hero chart. It follows the hero chart's cut and
 > carries no model, so it does not compete with it.
+>
+> **Amended by [ADR-0020](0020-an-introduction-and-plain-language-hints.md).**
+> "No prose" no longer holds: an introduction sits above the hero chart, and
+> a "?" beside each chart's title opens a hint on how to read it.
 
 The dashboard leads with **a single hero chart carrying two views**, switched in
 place and sharing one metric selector:

@@ -22,6 +22,7 @@ import {
   PENDING_DAY,
 } from "./fixture.ts";
 import { REPOSITORY_URL } from "./Footer.tsx";
+import { INTRO_FOLDED_KEY } from "./Intro.tsx";
 import { formatDay } from "./presentation.ts";
 
 /** The Day view opens on the record's last day. */
@@ -29,14 +30,17 @@ const OPENING_DAY = DASHBOARD.record.last;
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
-/** The headline figure shown for a model: the definition after its term. */
+/** The headline figure shown for a model: the definition after its term,
+ * in the hero chart, since the introduction and the scoreboard hold terms
+ * of their own. */
 function headline(model: string): string {
-  const term = screen
+  const term = within(heroChart())
     .getAllByRole("term")
     .find((t) => t.textContent?.startsWith(model));
   return term?.nextElementSibling?.textContent ?? "";
@@ -898,7 +902,7 @@ describe("the pending day", () => {
     );
     expect(within(chart).queryByText("Observed")).toBeNull();
     expect(screen.getByText(/^Not published yet/)).toBeTruthy();
-    expect(screen.queryAllByRole("term")).toHaveLength(0);
+    expect(within(heroChart()).queryAllByRole("term")).toHaveLength(0);
   });
 
   test("the latest-forecast chip opens the pending day from anywhere", async () => {
@@ -1007,6 +1011,134 @@ describe("the Diebold–Mariano card", () => {
     await screen.findByRole("img", {
       name: /^Diebold–Mariano statistic of AR-168 against Chronos-2 and Naïve/,
     });
+  });
+});
+
+describe("the introduction", () => {
+  function intro(): HTMLElement {
+    return screen.getByRole("region", {
+      name: "How electricity price forecasting works",
+    });
+  }
+
+  test("explains the idea, the models and the metrics", () => {
+    render(<App data={DASHBOARD} />);
+
+    const text = intro().textContent ?? "";
+    expect(text).toContain("fill the next day with a forecast");
+    expect(
+      within(intro())
+        .getAllByRole("term")
+        .map((t) => t.textContent),
+    ).toEqual(["Chronos-2", "AR-168", "Naïve", "MAE", "RMSE", "SMAPE", "rMAE"]);
+    expect(text).not.toContain("EUR/MWh and the naïve's");
+    expect(
+      [...intro().querySelectorAll("math")].map((m) =>
+        m.getAttribute("data-metric"),
+      ),
+    ).toEqual(["mae", "rmse", "smape", "rmae"]);
+  });
+
+  test("folds to one bar, and stays folded on the next visit", () => {
+    const { unmount } = render(<App data={DASHBOARD} />);
+
+    click("Hide");
+    expect(
+      screen.queryByRole("heading", { name: /forecasting works/ }),
+    ).toBeNull();
+    expect(localStorage.getItem(INTRO_FOLDED_KEY)).toBe("1");
+    unmount();
+
+    render(<App data={DASHBOARD} />);
+    const show = screen.getByRole("button", { name: /^New here\?/ });
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(show);
+    expect(intro()).toBeTruthy();
+    expect(localStorage.getItem(INTRO_FOLDED_KEY)).toBeNull();
+  });
+
+  test("opens when storage refuses to be read", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("denied");
+    });
+    render(<App data={DASHBOARD} />);
+
+    expect(intro()).toBeTruthy();
+  });
+});
+
+describe("the help notes", () => {
+  /** Opens a "?" note by its name, and returns the note. */
+  function openHelp(name: string, within_: HTMLElement = document.body) {
+    fireEvent.click(within(within_).getByRole("button", { name }));
+    return within(within_).getByRole("dialog", { name });
+  }
+
+  test("open from a ? beside the title, and Escape closes them", async () => {
+    await openDay();
+    expect(
+      screen.queryByRole("dialog", { name: "How to read the day chart" }),
+    ).toBeNull();
+
+    const note = openHelp("How to read the day chart");
+    expect(note.textContent).toContain(
+      "The black line is the price the market set",
+    );
+    const button = screen.getByRole("button", {
+      name: "How to read the day chart",
+    });
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(
+      screen.queryByRole("dialog", { name: "How to read the day chart" }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  test("close on a click outside, and stay open on a click inside", async () => {
+    await openDay();
+    const note = openHelp("How to read the day chart");
+
+    fireEvent.pointerDown(note);
+    expect(
+      screen.getByRole("dialog", { name: "How to read the day chart" }),
+    ).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+    expect(
+      screen.queryByRole("dialog", { name: "How to read the day chart" }),
+    ).toBeNull();
+  });
+
+  test("tell a scored day from the pending one", async () => {
+    await openDay();
+    expect(openHelp("How to read the day chart").textContent).toContain(
+      "The black line is the price the market set",
+    );
+    cleanup();
+
+    render(<App data={DASHBOARD_WITH_PENDING} />);
+    expect(openHelp("How to read the day chart").textContent).toContain(
+      "This day's prices are not set yet",
+    );
+  });
+
+  test("say in the README's words what every metric measures", async () => {
+    await openDay();
+    const day = screen.getByRole("region", { name: "Day accuracy" });
+
+    const note = openHelp("What the metrics mean", day);
+    expect(note.querySelectorAll("math")).toHaveLength(0);
+    for (const words of [
+      "The average miss per hour, in EUR/MWh.",
+      "a large miss counts for more than several small ones",
+      "relative to the size of the price, from 0 to 200",
+      "divided by the naïve forecast's",
+    ]) {
+      expect(note.textContent).toContain(words);
+    }
   });
 });
 
