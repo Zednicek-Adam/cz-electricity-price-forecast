@@ -14,8 +14,9 @@
  * switch is on, as a dashed whisker beyond each box: a 2022 spike or a sunny
  * Sunday's negative hour would otherwise flatten everything else. Over time
  * shares the hero chart's zoom, and on the Day view it marks the day open
- * above it. The chart has the hero chart's width and margins, so its x axis
- * lines up with the one above.
+ * above it. The chart has no sidebar and spans the full width (ADR-0021), so
+ * its viewBox is wider than the hero chart's: drawn at that width, its text
+ * comes out the same size as the hero chart's.
  */
 import type {
   DeliveryDate,
@@ -41,9 +42,9 @@ import { formatTick, paddedDomain } from "./charts.ts";
 import { formatPrice, SCOPE_LABELS, WEEKDAYS } from "./presentation.ts";
 import { Selection, useDragZoom, zoomRange, type Zoom } from "./Zoom.tsx";
 
-const WIDTH = 960;
-const HEIGHT = 260;
-const MARGIN = { top: 26, right: 96, bottom: 30, left: 48 };
+const WIDTH = 1400;
+const HEIGHT = 360;
+const MARGIN = { top: 34, right: 96, bottom: 30, left: 48 };
 const BOTTOM = HEIGHT - MARGIN.bottom;
 
 /** The scale spans the 10–90% ranges, or the extremes when they are drawn. */
@@ -162,7 +163,7 @@ function PriceAxis({ y }: { y: ReturnType<typeof priceScale> }) {
   const ticks = y.ticks(4);
   return (
     <>
-      <text x={4} y={12} {...TICK_LABEL}>
+      <text x={4} y={14} {...TICK_LABEL}>
         Price · EUR/MWh
       </text>
       <YGrid
@@ -434,9 +435,9 @@ export function PriceProfileChart({ prices, extremes }: ProfileProps) {
           onMouseLeave={() => setHovered(null)}
         >
           <PriceAxis y={y} />
-          <Group className="ticks-dense">{axis(indices, 11)}</Group>
-          <Group className="ticks-sparse">{axis(buckets.sparse, 14)}</Group>
-          <text x={WIDTH - MARGIN.right + 12} y={BOTTOM + 18} {...TICK_LABEL}>
+          <Group className="ticks-dense">{axis(indices, 15)}</Group>
+          <Group className="ticks-sparse">{axis(buckets.sparse, 18)}</Group>
+          <text x={WIDTH - MARGIN.right + 20} y={BOTTOM + 18} {...TICK_LABEL}>
             {buckets.axis}
           </text>
           {indices.map((i) => {

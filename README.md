@@ -11,7 +11,7 @@ Czech day-ahead market.
 
 **The dashboard:** <https://cz-epf.adam-zednicek123.workers.dev>
 
-![The dashboard's Day view: one delivery day's real price as a black line, with each model's forecast for the same 24 hours drawn over it, and below it each model's average miss for the day](docs/images/dashboard-day.png)
+![The dashboard's Day view: one delivery day's real price as a black line, with each model's forecast for the same 24 hours drawn over it, and beside it each model's average miss for the day](docs/images/dashboard-day.png)
 
 ## The problem in a minute
 

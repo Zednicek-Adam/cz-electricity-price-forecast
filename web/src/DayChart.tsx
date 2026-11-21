@@ -28,7 +28,7 @@ import { formatPrice, SERIES_COLOURS, SERIES_DASH } from "./presentation.ts";
 
 const WIDTH = 960;
 const HEIGHT = 340;
-const MARGIN = { top: 26, right: 96, bottom: 30, left: 48 };
+const MARGIN = { top: 34, right: 96, bottom: 30, left: 48 };
 const ORDINALS = Array.from({ length: 24 }, (_, i) => i + 1);
 
 interface Series {
@@ -88,7 +88,7 @@ export function DayChart({ day }: { day: DeliveryDay }) {
           aria-label={label}
           onMouseLeave={() => setHovered(null)}
         >
-          <text x={4} y={12} {...TICK_LABEL}>
+          <text x={4} y={14} {...TICK_LABEL}>
             EUR/MWh
           </text>
           <YGrid
@@ -133,10 +133,10 @@ export function DayChart({ day }: { day: DeliveryDay }) {
               stroke="var(--axis)"
               tickStroke="var(--axis)"
               tickLength={4}
-              tickLabelProps={{ ...TICK_LABEL, fontSize: 14 }}
+              tickLabelProps={{ ...TICK_LABEL, fontSize: 18 }}
             />
           </Group>
-          <text x={WIDTH - MARGIN.right + 12} y={bottom + 18} {...TICK_LABEL}>
+          <text x={WIDTH - MARGIN.right + 20} y={bottom + 18} {...TICK_LABEL}>
             Period
           </text>
           {series.map((s, index) => (
