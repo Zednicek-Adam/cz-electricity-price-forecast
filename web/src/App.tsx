@@ -674,49 +674,24 @@ function PriceView({
     view === "day" && prices.deliveryDates.includes(date) ? date : undefined;
 
   return (
-    <div className="view">
-      <div className="view-main">
-        <div className="panel-bar">
-          <div>
-            <p className="eyebrow">
-              {SCOPE_LABELS[history]} · {scopeRange(data, history)}
-            </p>
-            <div className="titled">
-              <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
-              <Help label="How to read the price chart">
-                <p>
-                  {profile
-                    ? `What the price itself did at each ${view === "weekday" ? "weekday" : "hour"}, so you can see where it swings most. Each box holds the middle half of the prices, with a line at the median and a dot at the average. The whiskers stretch to hold the middle 80%.`
-                    : "What the price itself did, so you can tell whether a big miss came on a wild day. The line is the average price. The dark band holds the middle half of the prices and the light band the middle 80%."}
-                </p>
-              </Help>
-            </div>
+    <>
+      <div className="panel-bar">
+        <div>
+          <p className="eyebrow">
+            {SCOPE_LABELS[history]} · {scopeRange(data, history)}
+          </p>
+          <div className="titled">
+            <h3 className="panel-title">{priceTitle(data, view, history)}</h3>
+            <Help label="How to read the price chart">
+              <p>
+                {profile
+                  ? `What the price itself did at each ${view === "weekday" ? "weekday" : "hour"}, so you can see where it swings most. Each box holds the middle half of the prices, with a line at the median and a dot at the average. The whiskers stretch to hold the middle 80%.`
+                  : "What the price itself did, so you can tell whether a big miss came on a wild day. The line is the average price. The dark band holds the middle half of the prices and the light band the middle 80%."}
+              </p>
+            </Help>
           </div>
         </div>
-        <PriceKey
-          box={profile}
-          extremes={profile && extremes}
-          day={marked && formatDay(marked)}
-        />
-        {!profile ? (
-          <>
-            <PriceOverTimeChart
-              prices={prices}
-              zoom={zoom}
-              onZoom={onZoom}
-              marked={marked}
-            />
-            <ZoomBar days={data.running.dates} zoom={zoom} onZoom={onZoom} />
-          </>
-        ) : (
-          <PriceProfileChart
-            prices={priceProfile(data, view, history)}
-            extremes={extremes}
-          />
-        )}
-      </div>
-      <div className="view-side">
-        <div className="chart-switches">
+        <div className="chart-switches inline">
           {profile && (
             <button
               type="button"
@@ -738,7 +713,28 @@ function PriceView({
           />
         </div>
       </div>
-    </div>
+      <PriceKey
+        box={profile}
+        extremes={profile && extremes}
+        day={marked && formatDay(marked)}
+      />
+      {!profile ? (
+        <>
+          <PriceOverTimeChart
+            prices={prices}
+            zoom={zoom}
+            onZoom={onZoom}
+            marked={marked}
+          />
+          <ZoomBar days={data.running.dates} zoom={zoom} onZoom={onZoom} />
+        </>
+      ) : (
+        <PriceProfileChart
+          prices={priceProfile(data, view, history)}
+          extremes={extremes}
+        />
+      )}
+    </>
   );
 }
 

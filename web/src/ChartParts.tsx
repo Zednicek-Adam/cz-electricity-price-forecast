@@ -19,7 +19,7 @@ type SeriesKey = ModelSlug | "observed";
 /** Tick labels: muted ink, small, never the series colour. */
 export const TICK_LABEL = {
   fill: "var(--muted)",
-  fontSize: 11,
+  fontSize: 15,
   fontFamily: "inherit",
 } as const;
 
@@ -107,7 +107,7 @@ export function EndMarker({ series, label, x, y, labelY }: EndProps) {
         x={x + 10}
         y={labelY}
         fill="var(--ink-2)"
-        fontSize={11.5}
+        fontSize={14}
         fontWeight={600}
       >
         {label}

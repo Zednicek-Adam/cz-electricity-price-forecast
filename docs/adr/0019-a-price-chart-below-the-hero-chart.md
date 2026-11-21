@@ -4,6 +4,10 @@ status: accepted
 
 # A price chart below the hero chart, on the hero chart's cut
 
+> **Amended by [ADR-0021](0021-the-broadsheet-look.md).** The price chart
+> spans the full width with its switches in its header, so its x axis no
+> longer lines up with the hero chart's, which has a sidebar beside it.
+
 > **Amends [ADR-0007](0007-the-dashboards-ten-second-story.md)**, which made
 > the hero chart the only chart above the scoreboard, and
 > [ADR-0018](0018-the-hero-chart-gains-a-weekday-and-an-hour-profile.md),

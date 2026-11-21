@@ -33,7 +33,7 @@ import {
 
 const WIDTH = 960;
 const HEIGHT = 340;
-const MARGIN = { top: 26, right: 96, bottom: 30, left: 48 };
+const MARGIN = { top: 34, right: 96, bottom: 30, left: 48 };
 
 interface Buckets {
   count: number;
@@ -120,7 +120,7 @@ export function ProfileChart({ profile }: { profile: MetricProfile }) {
           ].toLowerCase()}, ${buckets.described}.`}
           onMouseLeave={() => setHovered(null)}
         >
-          <text x={4} y={12} {...TICK_LABEL}>
+          <text x={4} y={14} {...TICK_LABEL}>
             {unit ? `${metricLabel} · ${unit}` : metricLabel}
           </text>
           <YGrid
@@ -138,9 +138,9 @@ export function ProfileChart({ profile }: { profile: MetricProfile }) {
             tickFormat={(v) => formatTick(Number(v))}
             tickLabelProps={TICK_LABEL}
           />
-          <Group className="ticks-dense">{axis(indices, 11)}</Group>
-          <Group className="ticks-sparse">{axis(buckets.sparse, 14)}</Group>
-          <text x={WIDTH - MARGIN.right + 12} y={bottom + 18} {...TICK_LABEL}>
+          <Group className="ticks-dense">{axis(indices, 15)}</Group>
+          <Group className="ticks-sparse">{axis(buckets.sparse, 18)}</Group>
+          <text x={WIDTH - MARGIN.right + 20} y={bottom + 18} {...TICK_LABEL}>
             {buckets.axis}
           </text>
           {profile.series.map((s, index) => {

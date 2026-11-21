@@ -44,7 +44,7 @@ import { Selection, useDragZoom, zoomRange, type Zoom } from "./Zoom.tsx";
 
 const WIDTH = 960;
 const HEIGHT = 340;
-const MARGIN = { top: 26, right: 96, bottom: 30, left: 48 };
+const MARGIN = { top: 34, right: 96, bottom: 30, left: 48 };
 /** The running metric's first weeks swing wildly on a handful of periods;
  * they are drawn, but do not set the scale, or the settled record would be a
  * flat line. The trailing metric starts on a whole window and needs no such
@@ -120,7 +120,7 @@ export function OverTimeChart({ series: whole, zoom, onZoom }: Props) {
           className="zoomable"
           {...handlers}
         >
-          <text x={4} y={12} {...TICK_LABEL}>
+          <text x={4} y={14} {...TICK_LABEL}>
             {unit ? `${metricLabel} · ${unit}` : metricLabel}
           </text>
           <YGrid

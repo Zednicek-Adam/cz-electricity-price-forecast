@@ -9,8 +9,8 @@ status: accepted
 > views, By weekday and By hour, so the hero chart has four tabs.
 
 > **Amended by [ADR-0021](0021-the-broadsheet-look.md).** The quality pass's
-> look is replaced: rules instead of cards, a sidebar beside each chart for
-> its switches and figures, new series colours and two self-hosted faces.
+> look is replaced: rules instead of cards, a sidebar beside each hero chart
+> for its switches and figures, new series colours and two self-hosted faces.
 
 > **Amends [ADR-0006](0006-how-accuracy-is-presented.md) and
 > [ADR-0007](0007-the-dashboards-ten-second-story.md).** It reverses ADR-0006's

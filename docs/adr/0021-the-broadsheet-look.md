@@ -6,8 +6,10 @@ status: accepted
 
 > **Amends [ADR-0017](0017-three-views-two-metric-switches-and-a-30-day-window.md)**,
 > whose front-end quality pass set the cards, the tiles and the series
-> colours, and [ADR-0020](0020-an-introduction-and-plain-language-hints.md),
-> whose hints opened from a "?".
+> colours, [ADR-0019](0019-a-price-chart-below-the-hero-chart.md), whose
+> price chart lined up with the hero chart's x axis, and
+> [ADR-0020](0020-an-introduction-and-plain-language-hints.md), whose hints
+> opened from a "?".
 
 The quality pass gave the page white cards with soft shadows on a grey
 plane, and a system font. The page now follows the Broadsheet design: a
@@ -41,14 +43,20 @@ tabs are uppercase, semibold and spaced 0.05em. Notes are italic. The fonts
 come from Fontsource and are bundled by Vite, so the page makes no request to
 a font CDN. The browser loads about 95 KB of fonts for the Latin subset.
 
-**A sidebar beside each chart.** Every hero view and the price chart put the
-chart in a wide column and, behind a rule, a narrow sidebar holding what goes
-with it. In Over time and the profiles that is the history and metric
-switches, and in Over time the headline numbers too, stacked one above the
-other. In the Day view it holds the day's accuracy panel with its metric
-selector, so ADR-0017's rule still holds: each selector sits beside what it
-changes. The ribbon and its worst / best / random buttons run under both
-columns. On a narrow screen the sidebar drops under its chart.
+**A sidebar beside each hero chart.** Every hero view puts the chart in a
+wide column and, behind a rule, a narrow sidebar holding what goes with it.
+In Over time and the profiles that is the history and metric switches, and
+in Over time the headline numbers too, stacked one above the other. In the
+Day view it holds the day's accuracy panel with its metric selector, so
+ADR-0017's rule still holds: each selector sits beside what it changes. The
+ribbon and its worst / best / random buttons run under both columns. On a
+narrow screen the sidebar drops under its chart.
+
+**The price chart at full width.** The price chart has only a history switch
+and, in the profiles, the min–max switch. A sidebar would hold those two and
+leave a tall blank column, so they sit in the chart's header bar and the
+chart spans the whole width. Its x axis no longer lines up with the hero
+chart's above it.
 
 **The scoreboard in two columns.** The accuracy table and its scope switch
 on the left, the Diebold–Mariano card on the right behind a rule.
@@ -60,10 +68,13 @@ accessible name.
 
 ## Consequences
 
-- The Diebold–Mariano chart gets about half the width it had, and it scales
-  by viewBox (ADR-0009), so its tick labels and band names come out small on
-  a laptop. That is the price of putting the table and the test side by
-  side. On a narrow screen it is full width again.
+- Each chart scales by viewBox (ADR-0009), so its text shrinks with the
+  width it is drawn at. The viewBoxes are sized for the column each chart
+  gets, so the axis numbers come out at about 12 to 14px on a laptop: the
+  hero charts keep 960 units beside the sidebar, the full-width price chart
+  takes 1400, and the Diebold–Mariano chart, at half width beside the table,
+  takes 640 and is drawn taller. On a phone each chart keeps a minimum width
+  and scrolls sideways, the price chart's frame wider in proportion.
 - Chrome draws the RMSE formula's root from a math font's MATH table, which
   Plex lacks. With Plex alone the root disappears without an error, so the
   radical takes the platform's math font and what sits under it stays in

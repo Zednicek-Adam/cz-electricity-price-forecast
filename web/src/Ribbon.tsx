@@ -88,7 +88,7 @@ export function Ribbon({ daily, selected, onPick }: Props) {
               y2={bottom + 4}
               stroke="var(--grid)"
             />
-            <text x={x(index) + 4} y={HEIGHT - 4} {...TICK_LABEL} fontSize={10}>
+            <text x={x(index) + 4} y={HEIGHT - 4} {...TICK_LABEL} fontSize={12}>
               {year}
             </text>
           </Group>

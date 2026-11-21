@@ -621,6 +621,15 @@ msqrt > * {
   gap: 14px;
 }
 
+/* The price chart has no sidebar: its switches sit in its header bar, so the
+   chart spans the full width. */
+.chart-switches.inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+}
+
 .card-bar {
   align-items: flex-start;
   margin-bottom: 14px;
@@ -1363,6 +1372,11 @@ footer p {
   }
   .chart-frame > .chart {
     min-width: 620px;
+  }
+  /* The price chart's viewBox is wider (it has no sidebar on a desktop), so
+     it needs a wider frame for its text to come out the same size. */
+  .prices .chart-frame > .chart {
+    min-width: 900px;
   }
   #root {
     padding: 16px 16px 0;
