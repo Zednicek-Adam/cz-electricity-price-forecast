@@ -24,9 +24,9 @@ import { Legend } from "./Legend.tsx";
 import { MODEL_LABELS, SERIES_COLOURS, SERIES_DASH } from "./presentation.ts";
 import { Segmented } from "./Segmented.tsx";
 
-const WIDTH = 960;
-const HEIGHT = 280;
-const MARGIN = { top: 14, right: 112, bottom: 30, left: 44 };
+const WIDTH = 640;
+const HEIGHT = 380;
+const MARGIN = { top: 14, right: 100, bottom: 34, left: 48 };
 const BAND = 1.96;
 /** The band's two sides, named just outside it, haloed in the surface colour
  * so a line crossing them never hides them. */
@@ -108,7 +108,7 @@ function ComparisonChart({ comparison }: { comparison: Comparison }) {
   };
   const labelY = spreadLabels(
     comparison.opponents.map((o) => y(lastPoint(o.dmStatistic)[1]) + 4),
-    14,
+    16,
   );
   const name = MODEL_LABELS[comparison.model];
   const label = `Diebold–Mariano statistic of ${name} against ${comparison.opponents
@@ -144,10 +144,10 @@ function ComparisonChart({ comparison }: { comparison: Comparison }) {
             />
           ))}
           <g className="side-labels" {...SIDE_LABEL}>
-            <text x={left + 8} y={y(BAND) - 7}>
+            <text x={left + 8} y={y(BAND) - 8}>
               ↑ Opponent more accurate
             </text>
-            <text x={left + 8} y={y(-BAND) + 16}>
+            <text x={left + 8} y={y(-BAND) + 20}>
               ↓ {name} more accurate
             </text>
           </g>
@@ -160,7 +160,7 @@ function ComparisonChart({ comparison }: { comparison: Comparison }) {
             }
             hideAxisLine
             hideTicks
-            tickLabelProps={{ ...TICK_LABEL, fontSize: 10 }}
+            tickLabelProps={TICK_LABEL}
           />
           <AxisBottom
             scale={x}
@@ -171,7 +171,7 @@ function ComparisonChart({ comparison }: { comparison: Comparison }) {
             tickLength={4}
             tickLabelProps={TICK_LABEL}
           />
-          <text x={right + 12} y={HEIGHT - MARGIN.bottom + 18} {...TICK_LABEL}>
+          <text x={right + 20} y={HEIGHT - MARGIN.bottom + 20} {...TICK_LABEL}>
             Period
           </text>
           {comparison.opponents.map((o, index) => (

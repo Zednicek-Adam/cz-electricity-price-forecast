@@ -9,6 +9,10 @@ status: accepted
 > explanatory prose on the dashboard, and
 > [ADR-0017](0017-three-views-two-metric-switches-and-a-30-day-window.md),
 > which let in labels but not explanations.
+>
+> **Amended by [ADR-0021](0021-the-broadsheet-look.md).** The hints open from
+> a "How to read" beside each title instead of a "?", and the introduction
+> sits on the page's paper rather than on a white card.
 
 The dashboard was built for a reader who already knows what a day-ahead
 price is, what a forecast is scored by and what MAE means. Most people who
